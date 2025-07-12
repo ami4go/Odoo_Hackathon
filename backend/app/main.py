@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 import uuid
 import os
-from app.database import engine, SessionLocal, Base
+from database import engine, SessionLocal, Base
 from sqlalchemy import or_, and_, case
 from fastapi import Query
 from fastapi import status
