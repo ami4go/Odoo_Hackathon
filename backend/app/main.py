@@ -1404,6 +1404,18 @@ def get_item_recommendations(
     recommendations = query.limit(limit).all()
     return recommendations
 
+@app.get("/swaps/me")
+def get_user_swaps(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    swaps = db.query(Swap).filter(
+        (Swap.initiatorId == current_user.id) | 
+        (Swap.recipientId == current_user.id)
+    ).order_by(Swap.createdAt.desc()).all()
+    return swaps
+
+
 @app.post("/items/{item_id}/redeem")
 def redeem_item_with_points(
     item_id: str,
