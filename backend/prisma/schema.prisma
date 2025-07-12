@@ -1,0 +1,314 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  avatarUrl     String?
+  pointsBalance Int      @default(0)
+  trustScore    Float    @default(0)
+  isAdmin       Boolean  @default(false)
+  isVerified    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  items             Item[]
+  initiatedSwaps    Swap[]             @relation("SwapInitiator")
+  receivedSwaps     Swap[]             @relation("SwapRecipient")
+  pointTransactions PointTransaction[]
+  sentMessages      Message[]
+  notifications     Notification[]
+  ratingsGiven      Rating[]           @relation("RatingGiver")
+  ratingsReceived   Rating[]           @relation("RatingReceiver")
+  adminActions      AdminAction[]
+  comments          Comment[]
+  viewLogs          ItemViewLog[]
+
+  @@map("users")
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  items Item[]
+
+  @@map("categories")
+}
+
+model Item {
+  id            String        @id @default(uuid())
+  userId        String
+  categoryId    String
+  title         String
+  description   String?
+  size          String?
+  condition     ItemCondition
+  itemType      ItemType
+  brand         String?
+  color         String?
+  material      String?
+  pointsValue   Int           @default(0)
+  isAvailable   Boolean       @default(true)
+  isApproved    Boolean       @default(false)
+  isFeatured    Boolean       @default(false)
+  isFlaggedByAI Boolean       @default(false)
+  viewCount     Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  user              User               @relation(fields: [userId], references: [id])
+  category          Category           @relation(fields: [categoryId], references: [id])
+  images            ItemImage[]
+  itemTags          ItemTag[]
+  initiatorSwaps    Swap[]             @relation("InitiatorItem")
+  recipientSwaps    Swap[]             @relation("RecipientItem")
+  pointTransactions PointTransaction[]
+  notifications     Notification[]
+  adminActions      AdminAction[]
+  comments          Comment[]
+  viewLogs          ItemViewLog[]
+
+  @@map("items")
+}
+
+model ItemImage {
+  id        String   @id @default(uuid())
+  itemId    String
+  imageUrl  String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@map("item_images")
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  // Relations
+  itemTags ItemTag[]
+
+  @@map("tags")
+}
+
+model ItemTag {
+  id     String @id @default(uuid())
+  itemId String
+  tagId  String
+
+  // Relations
+  item Item @relation(fields: [itemId], references: [id])
+  tag  Tag  @relation(fields: [tagId], references: [id])
+
+  @@unique([itemId, tagId])
+  @@map("item_tags")
+}
+
+model Swap {
+  id              String     @id @default(uuid())
+  initiatorId     String
+  recipientId     String
+  initiatorItemId String
+  recipientItemId String
+  status          SwapStatus @default(PENDING)
+  pointsExchanged Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  initiator         User               @relation("SwapInitiator", fields: [initiatorId], references: [id])
+  recipient         User               @relation("SwapRecipient", fields: [recipientId], references: [id])
+  initiatorItem     Item               @relation("InitiatorItem", fields: [initiatorItemId], references: [id])
+  recipientItem     Item               @relation("RecipientItem", fields: [recipientItemId], references: [id])
+  messages          Message[]
+  notifications     Notification[]
+  pointTransactions PointTransaction[]
+  ratings           Rating[]
+
+  @@map("swaps")
+}
+
+model PointTransaction {
+  id              String          @id @default(uuid())
+  userId          String
+  transactionType TransactionType
+  amount          Int
+  description     String?
+  relatedItemId   String?
+  relatedSwapId   String?
+  createdAt       DateTime        @default(now())
+
+  // Relations
+  user        User  @relation(fields: [userId], references: [id])
+  relatedItem Item? @relation(fields: [relatedItemId], references: [id])
+  relatedSwap Swap? @relation(fields: [relatedSwapId], references: [id])
+
+  @@map("point_transactions")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  swapId    String
+  senderId  String
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  swap   Swap @relation(fields: [swapId], references: [id])
+  sender User @relation(fields: [senderId], references: [id])
+
+  @@map("messages")
+}
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String
+  type          NotificationType
+  title         String
+  message       String
+  isRead        Boolean          @default(false)
+  relatedItemId String?
+  relatedSwapId String?
+  createdAt     DateTime         @default(now())
+
+  // Relations
+  user        User  @relation(fields: [userId], references: [id])
+  relatedItem Item? @relation(fields: [relatedItemId], references: [id])
+  relatedSwap Swap? @relation(fields: [relatedSwapId], references: [id])
+
+  @@map("notifications")
+}
+
+model Rating {
+  id          String   @id @default(uuid())
+  raterId     String
+  ratedUserId String
+  swapId      String?
+  rating      Int      @db.SmallInt
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  rater     User  @relation("RatingGiver", fields: [raterId], references: [id])
+  ratedUser User  @relation("RatingReceiver", fields: [ratedUserId], references: [id])
+  swap      Swap? @relation(fields: [swapId], references: [id])
+
+  @@unique([raterId, ratedUserId])
+  @@map("ratings")
+}
+
+model AdminAction {
+  id           String          @id @default(uuid())
+  adminId      String
+  actionType   AdminActionType
+  targetItemId String?
+  targetUserId String?
+  reason       String?
+  createdAt    DateTime        @default(now())
+
+  // Relations
+  admin      User  @relation(fields: [adminId], references: [id])
+  targetItem Item? @relation(fields: [targetItemId], references: [id])
+
+  @@map("admin_actions")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  itemId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  item Item @relation(fields: [itemId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+}
+
+model ItemViewLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  itemId    String
+  viewedAt  DateTime @default(now())
+  userAgent String?
+  ipAddress String?
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+  item Item  @relation(fields: [itemId], references: [id])
+
+  @@map("item_view_logs")
+}
+
+// Enums
+enum ItemCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum ItemType {
+  TOP
+  BOTTOM
+  DRESS
+  OUTERWEAR
+  SHOES
+  ACCESSORIES
+}
+
+enum SwapStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum TransactionType {
+  EARNED
+  SPENT
+  REFUNDED
+  BONUS
+}
+
+enum NotificationType {
+  SWAP_REQUEST
+  SWAP_ACCEPTED
+  SWAP_REJECTED
+  POINTS_EARNED
+  ITEM_APPROVED
+  ITEM_REJECTED
+}
+
+enum AdminActionType {
+  APPROVE_ITEM
+  REJECT_ITEM
+  REMOVE_ITEM
+  BAN_USER
+  UNBAN_USER
+}
