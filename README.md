@@ -1,61 +1,147 @@
-# ReWear – Community Clothing Exchange 👕♻️
 
-A web-based platform that enables users to exchange unused clothing through direct swaps or a point-based redemption system. Built for Odoo Hackathon '25.
+# 👕♻️ ReWear – Community Clothing Exchange
 
-## 🧩 Problem Statement
+ReWear is a sustainable fashion platform that enables users to **swap unused clothing** through direct exchanges or a **point-based redemption system**. Our goal is to **reduce textile waste**, promote **eco-conscious fashion**, and create a fun, Gen-Z-friendly community for circular clothing reuse.
 
-This project is based on **Problem Statement 3: ReWear – Community Clothing Exchange**, from the official Odoo Hackathon '25 problem statements.
+---
 
-The goal is to promote sustainable fashion and reduce textile waste by encouraging users to reuse wearable garments instead of discarding them.
+## 🚀 Features
 
+### Core
+- 🔐 User Authentication (Email/Password)
+- 🏠 Landing Page with Calls-to-Action
+- 👤 User Dashboard with Profile, Points, Swap History
+- 🛍️ Item Detail Page with “Swap” & “Redeem” options
+- ➕ Add New Item Page with Live Preview
+- 🧾 Points History & Analytics
+- ⚙️ Admin Panel with Moderation Tools
 
-# ✅ ReWear Backend Completion Checklist
+### Extras
+- 🔍 Smart Search + Filters
+- 🏷️ Tag-Based Recommendations
+- 🌙 Theme & Dark Mode Toggle
+- 📦 Item Availability Indicator
+- 🔔 Notification System
+- ⭐ Rating System
+- 📊 Admin Dashboard Stats
+- 🤖 Chatbot Integration
+- 🧠 Spam Detection (via Gemini)
+- 🔄 Real-time Updates (WebSocket ready)
 
-## 🔵 High Priority (Core UX/Engagement)
+---
 
-- [ ] **WebSocket Notification Integration**
-  - [ ] Create `/ws/notifications` WebSocket endpoint
-  - [ ] Emit notification updates on swap status changes
-  - [ ] Update frontend to listen for real-time updates
+## 🧱 Tech Stack
 
-- [ ] **Expose Chatbot API (Gemini-based)**
-  - [ ] Create route `/chatbot/query`
-  - [ ] Accept user question input
-  - [ ] Send to Gemini and return response
-  - [ ] Optionally store chat history per user
+### 🔧 Backend
+- Python (FastAPI / Flask)
+- PostgreSQL (or any SQL DB)
+- SQLAlchemy
+- JWT-based Authentication
+- REST APIs
 
-## 🟡 Medium Priority (Enhance Personalization & Insights)
+### 💅 Frontend
+- React (via **Vite**)
+- Tailwind CSS
+- Axios for API requests
+- React Router
+- Zustand or Context API for global state (optional)
+- Fully responsive and Gen-Z inspired UI
 
-- [ ] **Enhanced AI Recommendations**
-  - [x] Use tag/category history for item recs (basic done)
-  - [ ] Extend `/search/recommendations` to use Gemini to rank items
-  - [ ] Track user click/view data for future personalization
+---
 
-- [ ] **Swap Activity Web View (Public History)**
-  - [ ] Create `/users/{id}/swaps` for public profile viewing
-  - [ ] Optional: Add feedback history with swap context
+## 🛠️ Setup Instructions
 
-## 🟠 Low Priority (Optional but Nice)
+### 1. Clone the Repository
 
-- [ ] **Preview/Draft Item Listing**
-  - [ ] Route: `POST /items/drafts` – Save a draft listing
-  - [ ] Route: `GET /items/drafts` – Fetch user’s draft items
-  - [ ] Route: `PUT /items/drafts/{id}` – Update draft
+```bash
+git clone https://github.com/your-username/rewear.git
+cd rewear
+```
 
-- [ ] **Rate-Limiting & Abuse Protection**
-  - [ ] Add per-user rate limits (e.g., 10 items per hour)
-  - [ ] Consider IP-based limits for anonymous endpoints
+---
 
-## ✅ Already Completed
+### 2. ⚙️ Backend Setup
 
-- [x] User auth (signup/login)
-- [x] Swap flow with status management
-- [x] Points system (earn/spend/history)
-- [x] Notifications (create/read/read-all)
-- [x] AI spam detection (Gemini)
-- [x] Ratings system
-- [x] Admin controls (approve/reject/ban)
-- [x] Analytics dashboard
-- [x] Tag-based recommendations (basic)
-- [x] Smart search filters
-- [x] Featured items, availability, image upload
+> Make sure you have Python 3.10+ and pip installed.
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate   # or `venv\Scripts\activate` on Windows
+pip install -r requirements.txt
+```
+
+#### Run the backend server:
+
+```bash
+uvicorn main:app --reload
+```
+
+The backend will run at `http://localhost:8000`
+
+---
+
+### 3. 💻 Frontend Setup
+
+> Make sure you have **Node.js v16+** and **npm** installed.
+
+```bash
+cd frontend
+npm install
+```
+
+#### Run the frontend (Vite Dev Server):
+
+```bash
+npm run dev
+```
+
+Frontend will be available at `http://localhost:5173`
+
+---
+
+## ✅ Final Checklist Before Running
+
+- ✅ Backend is running on port `8000`
+- ✅ Frontend is connected to backend via `.env` or Axios base URL
+- ✅ No mock data or hardcoding — all data fetched from APIs
+- ✅ Database is seeded (if needed) with sample data (optional)
+- ✅ Admin credentials are created (if admin functionality exists)
+
+---
+
+## 📁 Project Structure
+
+```
+rewear/
+├── backend/
+│   ├── main.py
+│   ├── models/
+│   ├── routes/
+│   ├── schemas/
+│   └── ...
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── assets/
+│   │   └── ...
+│   └── index.html
+└── README.md
+```
+
+---
+
+## ✨ Contributing
+
+We love contributors! Please follow our coding standards (linting, folder structure, reusable components) and raise a pull request 🚀
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for more information.
+
+---
+
+> Built with 💚 to swap fast fashion for smart fashion.
