@@ -23,8 +23,7 @@ from pydantic import Field
 from enum import Enum
 from fastapi import Form, File, UploadFile, Request
 from fastapi.staticfiles import StaticFiles
-
-
+from fastapi.staticfiles import StaticFiles
 
 
 # Load env vars manually (or use dotenv if needed)
@@ -48,7 +47,7 @@ app.add_middleware(
 )
 
 # Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+#app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -551,6 +550,24 @@ def create_point_transaction(
     db.add(pt)
     db.commit()
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: Optional[str] = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
 @app.put("/swaps/{swap_id}/status")
 def update_swap_status(
     swap_id: str,
@@ -757,11 +774,93 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 @app.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.passwordHash):
+    if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+<<<<<<< Updated upstream
+=======
+
+@app.post("/items")
+async def create_item(
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    category_id: str = Form(...),
+    size: Optional[str] = Form(None),
+    condition: ItemCondition = Form(...),
+    item_type: ItemType = Form(...),
+    brand: Optional[str] = Form(None),
+    color: Optional[str] = Form(None),
+    material: Optional[str] = Form(None),
+    points_value: Optional[int] = Form(0),
+    tags: Optional[str] = Form(""),
+    images: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Check if spam using AI
+        is_flagged = check_if_spam_with_ai(title, description or "")
+        
+        # Create Item
+        item = Item(
+            id=str(uuid.uuid4()),
+            title=title,
+            description=description,
+            category_id=category_id,
+            size=size,
+            condition=condition.value,
+            item_type=item_type.value,
+            brand=brand,
+            color=color,
+            material=material,
+            points_value=points_value,
+            user_id=current_user.id,
+            is_flagged_by_ai=is_flagged
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+
+        # Save Images
+        for idx, img in enumerate(images):
+            img_bytes = await img.read()
+            filename = f"{uuid.uuid4()}.jpg"
+            filepath = f"static/uploads/{filename}"
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            with open(filepath, "wb") as f:
+                f.write(img_bytes)
+
+            image = ItemImage(
+                id=str(uuid.uuid4()),
+                item_id=item.id,
+                image_url=f"/static/uploads/{filename}",
+                is_primary=(idx == 0)
+            )
+            db.add(image)
+
+        # Tags
+        tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+        for tag_name in tag_list:
+            tag = db.query(Tag).filter(Tag.name == tag_name).first()
+            if not tag:
+                tag = Tag(id=str(uuid.uuid4()), name=tag_name)
+                db.add(tag)
+                db.flush()
+            item_tag = ItemTag(id=str(uuid.uuid4()), item_id=item.id, tag_id=tag.id)
+            db.add(item_tag)
+
+        db.commit()
+
+        return {"message": "Item created successfully", "item_id": item.id, "flagged_by_ai": is_flagged}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create item: {e}")
+
+@app.get("/items/{item_id}", response_model=ItemDetailResponse)
+>>>>>>> Stashed changes
 def get_item_detail(
     item_id: str,
     db: Session = Depends(get_db),
@@ -1534,6 +1633,7 @@ def get_user_profile(
         },
         "items": user_items
     }
+<<<<<<< Updated upstream
     from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -1601,3 +1701,20 @@ def ask_rewear_bot(payload: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chatbot error: {e}")
 
+=======
+
+@app.get("/stats/public")
+def get_public_stats(db: Session = Depends(get_db)):
+    """Get public stats for landing page (total users, items, swaps, completed swaps)."""
+    total_users = db.query(User).count()
+    total_items = db.query(Item).count()
+    total_swaps = db.query(Swap).count()
+    completed_swaps = db.query(Swap).filter(Swap.status == "COMPLETED").count()
+    # Optionally, you can add more stats here (e.g., CO2 saved, if you have logic for it)
+    return {
+        "total_users": total_users,
+        "total_items": total_items,
+        "total_swaps": total_swaps,
+        "completed_swaps": completed_swaps
+    }
+>>>>>>> Stashed changes
