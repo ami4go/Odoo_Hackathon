@@ -1,103 +1,81 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { Recycle, Heart, Instagram, Twitter, BookText as TikTok } from 'lucide-react';
+import { Heart, Recycle, Globe } from 'lucide-react';
 
-const Footer = () => {
+export const Footer: React.FC = () => {
   return (
     <footer className="bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand */}
           <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-emerald-500 p-2 rounded-full">
-                <Recycle className="h-6 w-6" />
-              </div>
-              <span className="text-2xl font-bold">ReWear</span>
-            </div>
-            <p className="text-gray-300 mb-4 max-w-md">
-              Your closet's second chance at slay ✨ Join the sustainable fashion revolution 
-              where every swap saves the planet, one outfit at a time! 🌱
+            <h3 className="text-2xl font-bold mb-4 bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+              ReWear
+            </h3>
+            <p className="text-gray-300 mb-4">
+              The coolest way to refresh your closet sustainably. Swap, don't shop, and make fashion circular! ♻️
             </p>
-            <div className="flex space-x-4">
-              <button className="text-gray-400 hover:text-pink-400 transition-colors">
-                <Instagram className="h-5 w-5" />
-              </button>
-              <button className="text-gray-400 hover:text-blue-400 transition-colors">
-                <Twitter className="h-5 w-5" />
-              </button>
-              <button className="text-gray-400 hover:text-purple-400 transition-colors">
-                <TikTok className="h-5 w-5" />
-              </button>
+            <div className="flex items-center space-x-6">
+              <div className="flex items-center space-x-2">
+                <Heart className="h-5 w-5 text-red-400" />
+                <span className="text-sm">Made with love for the planet</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Recycle className="h-5 w-5 text-green-400" />
+                <span className="text-sm">Circular fashion</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Globe className="h-5 w-5 text-blue-400" />
+                <span className="text-sm">Global community</span>
+              </div>
             </div>
           </div>
 
-          {/* Quick Links */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
-            <ul className="space-y-2">
+            <h4 className="font-semibold mb-4">Quick Links</h4>
+            <ul className="space-y-2 text-gray-300">
               <li>
-                <Link to="/browse" className="text-gray-300 hover:text-emerald-400 transition-colors">
+                <a href="/browse" className="hover:text-green-400 transition-colors">
                   Browse Items
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/add-item" className="text-gray-300 hover:text-emerald-400 transition-colors">
-                  List an Item
-                </Link>
-              </li>
-              <li>
-                <Link to="/how-it-works" className="text-gray-300 hover:text-emerald-400 transition-colors">
+                <a href="/how-it-works" className="hover:text-green-400 transition-colors">
                   How It Works
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/sustainability" className="text-gray-300 hover:text-emerald-400 transition-colors">
+                <a href="/sustainability" className="hover:text-green-400 transition-colors">
                   Sustainability
-                </Link>
+                </a>
               </li>
             </ul>
           </div>
 
-          {/* Support */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Support</h3>
-            <ul className="space-y-2">
+            <h4 className="font-semibold mb-4">Support</h4>
+            <ul className="space-y-2 text-gray-300">
               <li>
-                <Link to="/help" className="text-gray-300 hover:text-emerald-400 transition-colors">
-                  Help Center
-                </Link>
+                <a href="/faq" className="hover:text-green-400 transition-colors">
+                  FAQ
+                </a>
               </li>
               <li>
-                <Link to="/contact" className="text-gray-300 hover:text-emerald-400 transition-colors">
+                <a href="/contact" className="hover:text-green-400 transition-colors">
                   Contact Us
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/privacy" className="text-gray-300 hover:text-emerald-400 transition-colors">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link to="/terms" className="text-gray-300 hover:text-emerald-400 transition-colors">
-                  Terms of Service
-                </Link>
+                <a href="/community" className="hover:text-green-400 transition-colors">
+                  Community Guidelines
+                </a>
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="border-t border-gray-700 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-gray-400 text-sm">
-            © 2024 ReWear. Made with <Heart className="h-4 w-4 inline text-red-500" /> for the planet.
-          </p>
-          <p className="text-gray-400 text-sm mt-2 md:mt-0">
-            Sustainable fashion, one swap at a time 🌍
-          </p>
+        <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+          <p>&copy; 2025 ReWear. Making fashion sustainable, one swap at a time. 🌱</p>
         </div>
       </div>
     </footer>
   );
 };
-
-export default Footer;

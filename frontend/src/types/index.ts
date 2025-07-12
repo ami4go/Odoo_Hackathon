@@ -1,75 +1,65 @@
 export interface User {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  is_admin?: boolean;
-  points_balance?: number;
+  firstName: string;
+  lastName: string;
+  pointsBalance: number;
+  isAdmin: boolean;
+  isVerified: boolean;
+  profilePictureUrl?: string;
+  createdAt: string;
 }
 
 export interface Item {
   id: string;
   title: string;
   description?: string;
-  category_id: string;
-  condition: string;
-  item_type: string;
+  categoryId: string;
+  size?: string;
+  condition: 'NEW' | 'LIKE_NEW' | 'GOOD' | 'FAIR' | 'POOR';
+  itemType: 'CLOTHING' | 'SHOES' | 'ACCESSORIES';
   brand?: string;
   color?: string;
   material?: string;
-  points_value: number;
-  is_available: boolean;
-  is_approved: boolean;
-  is_featured: boolean;
-  view_count: number;
-  primary_image_url?: string;
-  created_at: string;
-}
-
-export interface ItemDetail extends Item {
-  category: {
-    id: string;
-    name: string;
-  };
-  tags: string[];
-  images: string[];
-  uploader: {
-    id: string;
-    name: string;
-  };
+  pointsValue: number;
+  isAvailable: boolean;
+  isApproved: boolean;
+  isFeatured: boolean;
+  viewCount: number;
+  primaryImageUrl?: string;
+  images?: string[];
+  tags?: string[];
+  category?: { id: string; name: string };
+  uploader?: { id: string; name: string };
+  createdAt: string;
 }
 
 export interface Swap {
   id: string;
-  status: string;
-  initiator_id: string;
-  recipient_id: string;
-  initiator_item_id: string;
-  recipient_item_id: string;
-  points_exchanged: number;
-  created_at: string;
-}
-
-export interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
+  initiatorId: string;
+  recipientId: string;
+  initiatorItemId: string;
+  recipientItemId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+  pointsExchanged: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PointTransaction {
   id: string;
-  transaction_type: string;
+  userId: string;
+  transactionType: 'EARNED' | 'SPENT';
   amount: number;
-  description?: string;
-  created_at: string;
+  description: string;
+  relatedSwapId?: string;
+  createdAt: string;
 }
 
-export interface Rating {
-  id: string;
-  rating: number;
-  comment?: string;
-  created_at: string;
+export interface SwapAnalytics {
+  totalSwaps: number;
+  completedSwaps: number;
+  totalPointsEarned: number;
+  totalPointsSpent: number;
+  mostSwappedCategory?: string;
 }
