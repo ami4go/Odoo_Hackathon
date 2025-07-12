@@ -21,6 +21,10 @@ import os
 from sqlalchemy import func  # For average rating
 from pydantic import Field
 from enum import Enum
+from typing import List
+from fastapi.staticfiles import StaticFiles
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # Define enums
 class ItemCondition(str, Enum):
@@ -356,6 +360,31 @@ class PointsHistoryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    userId = Column(String)  # ForeignKey to User
+    type = Column(String)
+    title = Column(String)
+    message = Column(String)
+    relatedSwapId = Column(String, nullable=True)
+    isRead = Column(Boolean, default=False)
+    createdAt = Column(DateTime, default=datetime.utcnow)
+
+class NotificationResponse(BaseModel):
+    id: str
+    type: str
+    title: str
+    message: str
+    relatedSwapId: Optional[str]
+    isRead: bool
+    createdAt: datetime
+
+    class Config:
+        orm_mode = True
+
+
 
 
 
@@ -1218,6 +1247,38 @@ def get_swap_analytics(db: Session = Depends(get_db), user: User = Depends(get_c
         "total_points_spent": total_points_spent,
         "most_swapped_category": most_swapped_category[0] if most_swapped_category else None
     }
+
+@app.get("/notifications", response_model=List[NotificationResponse])
+def get_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    notifications = (
+        db.query(Notification)
+        .filter(Notification.userId == current_user.id)
+        .order_by(Notification.createdAt.desc())
+        .all()
+    )
+    return notifications
+
+@app.put("/notifications/{notif_id}/read")
+def mark_notification_as_read(
+    notif_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    notif = db.query(Notification).filter(
+        Notification.id == notif_id,
+        Notification.userId == current_user.id
+    ).first()
+    
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notif.isRead = True
+    db.commit()
+    return {"message": "Notification marked as read"}
+
 
 
 
