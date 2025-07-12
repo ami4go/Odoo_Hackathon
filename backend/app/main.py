@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends, Form, File, UploadFile, Request, Query
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import Column, String, Boolean, DateTime, Integer
-from sqlalchemy.orm import declarative_base, Session
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey
+from sqlalchemy.orm import declarative_base, Session, relationship
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
@@ -10,8 +10,8 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 import uuid
 import os
-from app.database import engine, SessionLocal
-from sqlalchemy import or_, and_
+from app.database import engine, SessionLocal, Base
+from sqlalchemy import or_, and_, case
 from fastapi import Query
 from fastapi import status
 from fastapi import BackgroundTasks
@@ -21,50 +21,17 @@ import os
 from sqlalchemy import func  # For average rating
 from pydantic import Field
 from enum import Enum
+from fastapi import Form, File, UploadFile, Request
+from fastapi.staticfiles import StaticFiles
 
-# Define enums
-class ItemCondition(str, Enum):
-    NEW = "NEW"
-    LIKE_NEW = "LIKE_NEW"
-    GOOD = "GOOD"
-    FAIR = "FAIR"
-    POOR = "POOR"
 
-class ItemType(str, Enum):
-    TOP = "TOP"
-    BOTTOM = "BOTTOM"
-    DRESS = "DRESS"
-    OUTERWEAR = "OUTERWEAR"
-    SHOES = "SHOES"
-    ACCESSORIES = "ACCESSORIES"
 
-class TransactionType(str, Enum):
-    EARNED = "EARNED"
-    SPENT = "SPENT"
-    REFUNDED = "REFUNDED"
-    BONUS = "BONUS"
-
-class SwapStatus(str, Enum):
-    PENDING = "PENDING"
-    ACCEPTED = "ACCEPTED"
-    REJECTED = "REJECTED"
-    COMPLETED = "COMPLETED"
-    CANCELLED = "CANCELLED"
-
-class NotificationType(str, Enum):
-    SWAP_REQUEST = "SWAP_REQUEST"
-    SWAP_ACCEPTED = "SWAP_ACCEPTED"
-    SWAP_REJECTED = "SWAP_REJECTED"
-    POINTS_EARNED = "POINTS_EARNED"
-    ITEM_APPROVED = "ITEM_APPROVED"
-    ITEM_REJECTED = "ITEM_REJECTED"
 
 # Load env vars manually (or use dotenv if needed)
 SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-Base = declarative_base()
 app = FastAPI()
 
 load_dotenv()
@@ -80,14 +47,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-# Optional OAuth2 for endpoints that don't require authentication
-oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 # Database Dependency
 def get_db():
@@ -111,21 +78,27 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow)
     points_balance = Column(Integer, default=0)
 
-# SQLAlchemy Item model
+# Missing Database Models
+class Category(Base):
+    __tablename__ = "categories"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, unique=True)
+    description = Column(String, nullable=True)
+
 class Item(Base):
     __tablename__ = "items"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String)
-    category_id = Column(String)
-    title = Column(String)
+    title = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    category_id = Column(String, ForeignKey("categories.id"))
     size = Column(String, nullable=True)
-    condition = Column(String)
-    item_type = Column(String)
+    condition = Column(String, nullable=False)  # NEW, LIKE_NEW, GOOD, FAIR, POOR
+    item_type = Column(String, nullable=False)  # TOP, BOTTOM, DRESS, SHOES, ACCESSORY
     brand = Column(String, nullable=True)
     color = Column(String, nullable=True)
     material = Column(String, nullable=True)
     points_value = Column(Integer, default=0)
+    user_id = Column(String, ForeignKey("users.id"))
     is_available = Column(Boolean, default=True)
     is_approved = Column(Boolean, default=False)
     is_featured = Column(Boolean, default=False)
@@ -133,97 +106,139 @@ class Item(Base):
     view_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    category = relationship("Category", backref="items")
+    user = relationship("User", backref="items")
+    images = relationship("ItemImage", backref="item")
+    item_tags = relationship("ItemTag", backref="item")
 
-# SQLAlchemy Swap model
-class Swap(Base):
-    __tablename__ = "swaps"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    initiator_id = Column(String)
-    recipient_id = Column(String)
-    initiator_item_id = Column(String)
-    recipient_item_id = Column(String)
-    status = Column(String, default="PENDING")
-    points_exchanged = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
-
-# SQLAlchemy PointTransaction model
-class PointTransaction(Base):
-    __tablename__ = "point_transactions"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String)
-    transaction_type = Column(String)
-    amount = Column(Integer)
-    description = Column(String, nullable=True)
-    related_item_id = Column(String, nullable=True)
-    related_swap_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-# SQLAlchemy Notification model
-class Notification(Base):
-    __tablename__ = "notifications"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String)
-    type = Column(String)
-    title = Column(String)
-    message = Column(String)
-    is_read = Column(Boolean, default=False)
-    related_item_id = Column(String, nullable=True)
-    related_swap_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-# SQLAlchemy Rating model
-class Rating(Base):
-    __tablename__ = "ratings"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    rater_id = Column(String)
-    rated_user_id = Column(String)
-    swap_id = Column(String, nullable=True)
-    rating = Column(Integer)
-    comment = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-# SQLAlchemy Category model
-class Category(Base):
-    __tablename__ = "categories"
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, unique=True)
-    description = Column(String, nullable=True)
-    icon = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-# SQLAlchemy ItemImage model
 class ItemImage(Base):
     __tablename__ = "item_images"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    item_id = Column(String)
-    image_url = Column(String)
+    item_id = Column(String, ForeignKey("items.id"))
+    image_url = Column(String, nullable=False)
     is_primary = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# SQLAlchemy Tag model
 class Tag(Base):
     __tablename__ = "tags"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, unique=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
-# SQLAlchemy ItemTag model
 class ItemTag(Base):
     __tablename__ = "item_tags"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    item_id = Column(String)
-    tag_id = Column(String)
+    item_id = Column(String, ForeignKey("items.id"))
+    tag_id = Column(String, ForeignKey("tags.id"))
+    
+    # Relationships
+    tag = relationship("Tag", backref="item_tags")
 
-# SQLAlchemy ItemViewLog model
+class Swap(Base):
+    __tablename__ = "swaps"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    initiator_id = Column(String, ForeignKey("users.id"))
+    recipient_id = Column(String, ForeignKey("users.id"))
+    initiator_item_id = Column(String, ForeignKey("items.id"))
+    recipient_item_id = Column(String, ForeignKey("items.id"))
+    status = Column(String, default="PENDING")  # PENDING, ACCEPTED, REJECTED, CANCELLED, COMPLETED
+    points_exchanged = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    initiator = relationship("User", foreign_keys=[initiator_id], backref="initiated_swaps")
+    recipient = relationship("User", foreign_keys=[recipient_id], backref="received_swaps")
+    initiator_item = relationship("Item", foreign_keys=[initiator_item_id])
+    recipient_item = relationship("Item", foreign_keys=[recipient_item_id])
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"))
+    type = Column(String, nullable=False)  # SWAP_REQUEST, SWAP_ACCEPTED, SWAP_REJECTED, etc.
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    related_swap_id = Column(String, ForeignKey("swaps.id"), nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", backref="notifications")
+    related_swap = relationship("Swap", backref="notifications")
+
+class PointTransaction(Base):
+    __tablename__ = "point_transactions"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"))
+    transaction_type = Column(String, nullable=False)  # EARNED, SPENT, BONUS
+    amount = Column(Integer, nullable=False)
+    description = Column(String, nullable=True)
+    related_item_id = Column(String, ForeignKey("items.id"), nullable=True)
+    related_swap_id = Column(String, ForeignKey("swaps.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", backref="point_transactions")
+
+class Rating(Base):
+    __tablename__ = "ratings"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    rater_id = Column(String, ForeignKey("users.id"))
+    rated_user_id = Column(String, ForeignKey("users.id"))
+    rating = Column(Integer, nullable=False)  # 1-5 stars
+    comment = Column(String, nullable=True)
+    swap_id = Column(String, ForeignKey("swaps.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    rater = relationship("User", foreign_keys=[rater_id], backref="ratings_given")
+    rated_user = relationship("User", foreign_keys=[rated_user_id], backref="ratings_received")
+
 class ItemViewLog(Base):
     __tablename__ = "item_view_logs"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, nullable=True)
-    item_id = Column(String)
-    viewed_at = Column(DateTime, default=datetime.utcnow)
+    item_id = Column(String, ForeignKey("items.id"))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
     user_agent = Column(String, nullable=True)
     ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    item = relationship("Item", backref="view_logs")
+    user = relationship("User", backref="view_logs")
+
+class AdminAction(Base):
+    __tablename__ = "admin_actions"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    admin_id = Column(String, ForeignKey("users.id"))
+    action_type = Column(String, nullable=False)  # APPROVE_ITEM, REJECT_ITEM, BAN_USER, etc.
+    target_item_id = Column(String, ForeignKey("items.id"), nullable=True)
+    target_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    admin = relationship("User", foreign_keys=[admin_id], backref="admin_actions")
+    target_item = relationship("Item", foreign_keys=[target_item_id])
+    target_user = relationship("User", foreign_keys=[target_user_id])
+
+# Enums for Item conditions and types
+class ItemCondition(str, Enum):
+    NEW = "NEW"
+    LIKE_NEW = "LIKE_NEW"
+    GOOD = "GOOD"
+    FAIR = "FAIR"
+    POOR = "POOR"
+
+class ItemType(str, Enum):
+    TOP = "TOP"
+    BOTTOM = "BOTTOM"
+    DRESS = "DRESS"
+    SHOES = "SHOES"
+    ACCESSORY = "ACCESSORY"
+
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -377,34 +392,17 @@ def verify_password(plain, hashed):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
 def get_current_user_optional(token: str = Depends(oauth2_scheme_optional), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
+        user_id: Optional[str] = payload.get("sub")
         if not user_id:
             return None
         return db.query(User).filter(User.id == user_id).first()
     except:
         return None
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
-        raise credentials_exception
-    return user
-
 def create_notification(
     db: Session,
     user_id: str,
@@ -585,7 +583,7 @@ def update_swap_status(
 
 
 def require_admin(user: User = Depends(get_current_user)):
-    if not user.isAdmin:
+    if not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return user
 def spam_detection_prompt(title: str, description: str) -> str:
@@ -655,6 +653,23 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: Optional[str] = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
 
 @app.post("/items")
 async def create_item(
@@ -674,6 +689,9 @@ async def create_item(
     db: Session = Depends(get_db)
 ):
     try:
+        # Check if spam using AI
+        is_flagged = check_if_spam_with_ai(title, description or "")
+        
         # Create Item
         item = Item(
             id=str(uuid.uuid4()),
@@ -681,13 +699,14 @@ async def create_item(
             description=description,
             category_id=category_id,
             size=size,
-            condition=condition,
-            item_type=item_type,
+            condition=condition.value,
+            item_type=item_type.value,
             brand=brand,
             color=color,
             material=material,
             points_value=points_value,
             user_id=current_user.id,
+            is_flagged_by_ai=is_flagged
         )
         db.add(item)
         db.commit()
@@ -705,13 +724,13 @@ async def create_item(
             image = ItemImage(
                 id=str(uuid.uuid4()),
                 item_id=item.id,
-                imageUrl=f"/static/uploads/{filename}",
-                isPrimary=(idx == 0)
+                image_url=f"/static/uploads/{filename}",
+                is_primary=(idx == 0)
             )
             db.add(image)
 
         # Tags
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
         for tag_name in tag_list:
             tag = db.query(Tag).filter(Tag.name == tag_name).first()
             if not tag:
@@ -723,7 +742,7 @@ async def create_item(
 
         db.commit()
 
-        return {"message": "Item created successfully", "item_id": item.id}
+        return {"message": "Item created successfully", "item_id": item.id, "flagged_by_ai": is_flagged}
 
     except Exception as e:
         db.rollback()
@@ -745,16 +764,16 @@ def get_item_detail(
         raise HTTPException(status_code=404, detail="Item not found or not approved")
 
     # Increment view count
-    item.viewCount += 1
+    item.view_count += 1
     db.commit()
 
     # Optional: Log view
     view_log = ItemViewLog(
         id=str(uuid.uuid4()),
-        itemId=item.id,
-        userId=current_user.id if current_user else None,
-        userAgent=request.headers.get("user-agent") if request else None,
-        ipAddress=request.client.host if request else None,
+        item_id=item.id,
+        user_id=current_user.id if current_user else None,
+        user_agent=request.headers.get("user-agent") if request else None,
+        ip_address=request.client.host if request else None,
     )
     db.add(view_log)
     db.commit()
@@ -769,20 +788,20 @@ def get_item_detail(
         brand=item.brand,
         color=item.color,
         material=item.material,
-        points_value=item.pointsValue,
-        is_available=item.isAvailable,
-        is_approved=item.isApproved,
-        is_featured=item.isFeatured,
-        created_at=item.createdAt,
+        points_value=item.points_value,
+        is_available=item.is_available,
+        is_approved=item.is_approved,
+        is_featured=item.is_featured,
+        created_at=item.created_at,
         category={
             "id": item.category.id,
             "name": item.category.name,
         },
-        tags=[tag.tag.name for tag in item.itemTags],
-        images=[img.imageUrl for img in item.images],
+        tags=[tag.name for tag in item.item_tags],
+        images=[img.image_url for img in item.item_images],
         uploader={
             "id": item.user.id,
-            "name": f"{item.user.firstName} {item.user.lastName}",
+            "name": f"{item.user.first_name} {item.user.last_name}",
         }
     )
 
@@ -795,8 +814,8 @@ def get_points_history(
 ):
     transactions = (
         db.query(PointTransaction)
-        .filter(PointTransaction.userId == current_user.id)
-        .order_by(PointTransaction.createdAt.desc())
+        .filter(PointTransaction.user_id == current_user.id)
+        .order_by(PointTransaction.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -817,16 +836,16 @@ def browse_items(
     limit: int = 20,
     db: Session = Depends(get_db),
 ):
-    query = db.query(Item).filter(Item.isAvailable == True, Item.isApproved == True)
+    query = db.query(Item).filter(Item.is_available == True, Item.is_approved == True)
 
     if category_id:
-        query = query.filter(Item.categoryId == category_id)
+        query = query.filter(Item.category_id == category_id)
 
     if condition:
         query = query.filter(Item.condition == condition.upper())
 
     if item_type:
-        query = query.filter(Item.itemType == item_type.upper())
+        query = query.filter(Item.item_type == item_type.upper())
 
     if search:
         search_pattern = f"%{search.lower()}%"
@@ -842,29 +861,29 @@ def browse_items(
         query = query.join(ItemTag).join(Tag).filter(Tag.name.in_(tag_list))
 
     if sort_by == "popular":
-        query = query.order_by(Item.viewCount.desc())
+        query = query.order_by(Item.view_count.desc())
     else:
-        query = query.order_by(Item.createdAt.desc())
+        query = query.order_by(Item.created_at.desc())
 
     items = query.offset(skip).limit(limit).all()
 
     # For each item, get primary image URL
     result = []
     for item in items:
-        primary_img = next((img.imageUrl for img in item.images if img.isPrimary), None)
+        primary_img = next((img.image_url for img in item.item_images if img.is_primary), None)
         result.append(
             ItemListResponse(
                 id=item.id,
                 title=item.title,
                 description=item.description,
-                category_id=item.categoryId,
+                category_id=item.category_id,
                 condition=item.condition.name,
-                item_type=item.itemType.name,
-                points_value=item.pointsValue,
-                is_available=item.isAvailable,
-                is_approved=item.isApproved,
-                is_featured=item.isFeatured,
-                view_count=item.viewCount,
+                item_type=item.item_type.name,
+                points_value=item.points_value,
+                is_available=item.is_available,
+                is_approved=item.is_approved,
+                is_featured=item.is_featured,
+                view_count=item.view_count,
                 primary_image_url=primary_img,
             )
         )
@@ -881,9 +900,9 @@ def request_swap(
     # Fetch initiator's item - must belong to current user
     initiator_item = db.query(Item).filter(
         Item.id == swap_request.initiator_item_id,
-        Item.userId == current_user.id,
-        Item.isAvailable == True,
-        Item.isApproved == True
+        Item.user_id == current_user.id,
+        Item.is_available == True,
+        Item.is_approved == True
     ).first()
 
     if not initiator_item:
@@ -892,22 +911,22 @@ def request_swap(
     # Fetch recipient's item
     recipient_item = db.query(Item).filter(
         Item.id == swap_request.recipient_item_id,
-        Item.isAvailable == True,
-        Item.isApproved == True
+        Item.is_available == True,
+        Item.is_approved == True
     ).first()
 
     if not recipient_item:
         raise HTTPException(status_code=400, detail="Recipient item invalid or unavailable")
 
     # Cannot swap item with self
-    if recipient_item.userId == current_user.id:
+    if recipient_item.user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot swap with your own item")
 
     # Check if there is already a pending swap for these items by the user
     existing_swap = db.query(Swap).filter(
-        Swap.initiatorId == current_user.id,
-        Swap.initiatorItemId == initiator_item.id,
-        Swap.recipientItemId == recipient_item.id,
+        Swap.initiator_id == current_user.id,
+        Swap.initiator_item_id == initiator_item.id,
+        Swap.recipient_item_id == recipient_item.id,
         Swap.status == "PENDING"
     ).first()
 
@@ -916,14 +935,14 @@ def request_swap(
 
     # Create new swap record
     new_swap = Swap(
-        initiatorId=current_user.id,
-        recipientId=recipient_item.userId,
-        initiatorItemId=initiator_item.id,
-        recipientItemId=recipient_item.id,
+        initiator_id=current_user.id,
+        recipient_id=recipient_item.user_id,
+        initiator_item_id=initiator_item.id,
+        recipient_item_id=recipient_item.id,
         status="PENDING",
-        pointsExchanged=0,
-        createdAt=datetime.utcnow(),
-        updatedAt=datetime.utcnow()
+        points_exchanged=0,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
 
     db.add(new_swap)
@@ -932,81 +951,11 @@ def request_swap(
 
     return new_swap
 
-@app.put("/swaps/{swap_id}/status")
-def update_swap_status(
-    swap_id: str,
-    status_update: SwapStatusUpdate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    allowed_statuses = {"ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED"}
-    new_status = status_update.status.upper()
 
-    if new_status not in allowed_statuses:
-        raise HTTPException(status_code=400, detail="Invalid status")
-
-    swap = db.query(Swap).filter(Swap.id == swap_id).first()
-    if not swap:
-        raise HTTPException(status_code=404, detail="Swap not found")
-
-    # Only recipient or initiator can update status
-    if current_user.id not in [swap.initiatorId, swap.recipientId]:
-        raise HTTPException(status_code=403, detail="Not authorized to update this swap")
-
-    # Business logic for status updates:
-
-    # Recipient can ACCEPT or REJECT a PENDING swap
-    if new_status == "ACCEPTED":
-        if swap.status != "PENDING":
-            raise HTTPException(status_code=400, detail="Swap is not pending")
-        if current_user.id != swap.recipientId:
-            raise HTTPException(status_code=403, detail="Only recipient can accept")
-        swap.status = "ACCEPTED"
-        # Mark both items unavailable
-        initiator_item = db.query(Item).filter(Item.id == swap.initiatorItemId).first()
-        recipient_item = db.query(Item).filter(Item.id == swap.recipientItemId).first()
-        initiator_item.isAvailable = False
-        recipient_item.isAvailable = False
-
-    elif new_status == "REJECTED":
-        if swap.status != "PENDING":
-            raise HTTPException(status_code=400, detail="Swap is not pending")
-        if current_user.id != swap.recipientId:
-            raise HTTPException(status_code=403, detail="Only recipient can reject")
-        swap.status = "REJECTED"
-
-    elif new_status == "CANCELLED":
-        # Either party can cancel if swap not completed
-        if swap.status in ["COMPLETED", "CANCELLED", "REJECTED"]:
-            raise HTTPException(status_code=400, detail="Swap cannot be cancelled")
-        if current_user.id not in [swap.initiatorId, swap.recipientId]:
-            raise HTTPException(status_code=403, detail="Not authorized to cancel")
-        swap.status = "CANCELLED"
-
-    elif new_status == "COMPLETED":
-        # Only initiator can mark swap completed after acceptance
-        if swap.status != "ACCEPTED":
-            raise HTTPException(status_code=400, detail="Swap not accepted yet")
-        if current_user.id != swap.initiatorId:
-            raise HTTPException(status_code=403, detail="Only initiator can complete the swap")
-        swap.status = "COMPLETED"
-        # Transfer item ownership
-        initiator_item = db.query(Item).filter(Item.id == swap.initiatorItemId).first()
-        recipient_item = db.query(Item).filter(Item.id == swap.recipientItemId).first()
-        initiator_item.userId, recipient_item.userId = recipient_item.userId, initiator_item.userId
-        # Mark items available after swap completed (optional based on your logic)
-        initiator_item.isAvailable = True
-        recipient_item.isAvailable = True
-
-    swap.updatedAt = datetime.utcnow()
-    db.commit()
-    db.refresh(swap)
-
-    return {"message": f"Swap status updated to {swap.status}"}
 
 @app.get("/admin/items/pending")
 def get_pending_items(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    items = db.query(Item).filter(Item.isApproved == False).all()
+    items = db.query(Item).filter(Item.is_approved == False).all()
     return items
 
 @app.post("/admin/items/{item_id}/approve")
@@ -1014,12 +963,12 @@ def approve_item(item_id: str, db: Session = Depends(get_db), admin: User = Depe
     item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    item.isApproved = True
-    item.isFlaggedByAI = False  # if it was flagged previously
+    item.is_approved = True
+    item.is_flagged_by_ai = False  # if it was flagged previously
     db.add(AdminAction(
-        adminId=admin.id,
-        actionType="APPROVE_ITEM",
-        targetItemId=item.id
+        admin_id=admin.id,
+        action_type="APPROVE_ITEM",
+        target_item_id=item.id
     ))
     db.commit()
     return {"message": f"Item {item_id} approved"}
@@ -1031,9 +980,9 @@ def reject_item(item_id: str, reason: Optional[str] = None, db: Session = Depend
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     db.add(AdminAction(
-        adminId=admin.id,
-        actionType="REJECT_ITEM",
-        targetItemId=item.id,
+        admin_id=admin.id,
+        action_type="REJECT_ITEM",
+        target_item_id=item.id,
         reason=reason
     ))
     db.delete(item)
@@ -1046,9 +995,9 @@ def remove_item(item_id: str, reason: Optional[str] = None, db: Session = Depend
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     db.add(AdminAction(
-        adminId=admin.id,
-        actionType="REMOVE_ITEM",
-        targetItemId=item.id,
+        admin_id=admin.id,
+        action_type="REMOVE_ITEM",
+        target_item_id=item.id,
         reason=reason
     ))
     db.delete(item)
@@ -1056,7 +1005,7 @@ def remove_item(item_id: str, reason: Optional[str] = None, db: Session = Depend
     return {"message": f"Item {item_id} removed"}
 @app.get("/admin/items/flagged")
 def get_flagged_items(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    items = db.query(Item).filter(Item.isFlaggedByAI == True).all()
+    items = db.query(Item).filter(Item.is_flagged_by_ai == True).all()
     return items
 
 @app.post("/admin/users/{user_id}/ban")
@@ -1064,11 +1013,11 @@ def ban_user(user_id: str, reason: Optional[str] = None, db: Session = Depends(g
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.isVerified = False  # or add a separate `isBanned` field if needed
+    user.is_verified = False  # or add a separate `isBanned` field if needed
     db.add(AdminAction(
-        adminId=admin.id,
-        actionType="BAN_USER",
-        targetUserId=user.id,
+        admin_id=admin.id,
+        action_type="BAN_USER",
+        target_user_id=user.id,
         reason=reason
     ))
     db.commit()
@@ -1079,11 +1028,11 @@ def unban_user(user_id: str, db: Session = Depends(get_db), admin: User = Depend
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.isVerified = True
+    user.is_verified = True
     db.add(AdminAction(
-        adminId=admin.id,
-        actionType="UNBAN_USER",
-        targetUserId=user.id,
+        admin_id=admin.id,
+        action_type="UNBAN_USER",
+        target_user_id=user.id,
     ))
     db.commit()
     return {"message": f"User {user_id} unbanned"}
@@ -1095,31 +1044,25 @@ def add_item(item: ItemCreate, db: Session = Depends(get_db), user: User = Depen
 
     new_item = Item(
         id=str(uuid.uuid4()),
-        userId=user.id,
+        user_id=user.id,
         title=item.title,
         description=item.description,
-        categoryId=item.categoryId,
+        category_id=item.category_id,
         size=item.size,
         condition=item.condition,
-        itemType=item.itemType,
+        item_type=item.item_type,
         brand=item.brand,
         color=item.color,
         material=item.material,
-        pointsValue=item.pointsValue or 0,
-        isFlaggedByAI=is_flagged
+        points_value=item.points_value or 0,
+        is_flagged_by_ai=is_flagged
     )
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
 
     return {"message": "Item added successfully", "flagged_by_ai": is_flagged}
-@app.get("/admin/items/flagged")
-def get_flagged_items(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    if not user.isAdmin:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
-    flagged_items = db.query(Item).filter(Item.isFlaggedByAI == True).all()
-    return flagged_items
 
 
 # --- API to create or update rating ---
@@ -1127,23 +1070,23 @@ def get_flagged_items(db: Session = Depends(get_db), user: User = Depends(get_cu
 @app.post("/ratings", response_model=RatingResponse)
 def rate_user(rating: RatingCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     existing = db.query(Rating).filter(
-        Rating.raterId == user.id,
-        Rating.ratedUserId == rating.rated_user_id
+        Rating.rater_id == user.id,
+        Rating.rated_user_id == rating.rated_user_id
     ).first()
 
     if existing:
         existing.rating = rating.rating
         existing.comment = rating.comment
-        existing.swapId = rating.swap_id
+        existing.swap_id = rating.swap_id
     else:
         new_rating = Rating(
             id=str(uuid.uuid4()),
-            raterId=user.id,
-            ratedUserId=rating.rated_user_id,
+            rater_id=user.id,
+            rated_user_id=rating.rated_user_id,
             rating=rating.rating,
             comment=rating.comment,
-            swapId=rating.swap_id,
-            createdAt=datetime.utcnow()
+            swap_id=rating.swap_id,
+            created_at=datetime.utcnow()
         )
         db.add(new_rating)
 
@@ -1154,9 +1097,9 @@ def rate_user(rating: RatingCreate, db: Session = Depends(get_db), user: User = 
 
 @app.get("/ratings/user/{user_id}")
 def get_user_ratings(user_id: str, db: Session = Depends(get_db)):
-    avg_rating = db.query(func.avg(Rating.rating)).filter(Rating.ratedUserId == user_id).scalar()
-    total_ratings = db.query(func.count(Rating.id)).filter(Rating.ratedUserId == user_id).scalar()
-    recent = db.query(Rating).filter(Rating.ratedUserId == user_id).order_by(Rating.createdAt.desc()).limit(10).all()
+    avg_rating = db.query(func.avg(Rating.rating)).filter(Rating.rated_user_id == user_id).scalar()
+    total_ratings = db.query(func.count(Rating.id)).filter(Rating.rated_user_id == user_id).scalar()
+    recent = db.query(Rating).filter(Rating.rated_user_id == user_id).order_by(Rating.created_at.desc()).limit(10).all()
 
     return {
         "average_rating": round(avg_rating or 0, 2),
@@ -1167,16 +1110,7 @@ def get_user_ratings(user_id: str, db: Session = Depends(get_db)):
 
 # 1. Get user's point history
 # ----------------------------
-@app.get("/points/history", response_model=List[PointsHistoryResponse])
-def get_points_history(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-    transaction_type: Optional[str] = None
-):
-    query = db.query(PointTransaction).filter(PointTransaction.userId == user.id)
-    if transaction_type:
-        query = query.filter(PointTransaction.transactionType == transaction_type.upper())
-    return query.order_by(PointTransaction.createdAt.desc()).all()
+
 
 
 # ----------------------------------
@@ -1185,29 +1119,29 @@ def get_points_history(
 @app.get("/analytics/swaps")
 def get_swap_analytics(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     total_swaps = db.query(Swap).filter(
-        (Swap.initiatorId == user.id) | (Swap.recipientId == user.id)
+        (Swap.initiator_id == user.id) | (Swap.recipient_id == user.id)
     ).count()
 
     completed_swaps = db.query(Swap).filter(
-        ((Swap.initiatorId == user.id) | (Swap.recipientId == user.id)) &
+        ((Swap.initiator_id == user.id) | (Swap.recipient_id == user.id)) &
         (Swap.status == "COMPLETED")
     ).count()
 
     total_points_earned = db.query(func.sum(PointTransaction.amount)).filter(
-        PointTransaction.userId == user.id,
-        PointTransaction.transactionType == "EARNED"
+        PointTransaction.user_id == user.id,
+        PointTransaction.transaction_type == "EARNED"
     ).scalar() or 0
 
     total_points_spent = db.query(func.sum(PointTransaction.amount)).filter(
-        PointTransaction.userId == user.id,
-        PointTransaction.transactionType == "SPENT"
+        PointTransaction.user_id == user.id,
+        PointTransaction.transaction_type == "SPENT"
     ).scalar() or 0
 
     # Optional: Most swapped category
     most_swapped_category = db.query(Category.name, func.count(Item.id)).\
-        join(Item, Category.id == Item.categoryId).\
-        join(Swap, (Swap.initiatorItemId == Item.id) | (Swap.recipientItemId == Item.id)).\
-        filter((Swap.initiatorId == user.id) | (Swap.recipientId == user.id)).\
+        join(Item, Category.id == Item.category_id).\
+        join(Swap, (Swap.initiator_item_id == Item.id) | (Swap.recipient_item_id == Item.id)).\
+        filter((Swap.initiator_id == user.id) | (Swap.recipient_id == user.id)).\
         group_by(Category.name).\
         order_by(func.count(Item.id).desc()).first()
 
@@ -1220,8 +1154,358 @@ def get_swap_analytics(db: Session = Depends(get_db), user: User = Depends(get_c
     }
 
 
+#Notifications API – Fetch Notifications
+class NotificationResponse(BaseModel):
+    id: str
+    type: str
+    title: str
+    message: str
+    related_swap_id: Optional[str]
+    is_read: bool
+    created_at: datetime
 
+    class Config:
+        from_attributes = True
+@app.get("/notifications", response_model=List[NotificationResponse])
+def get_my_notifications(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
+):
+    notifs = (
+        db.query(Notification)
+        .filter(Notification.user_id == user.id)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+    return notifs
 
+# Missing API Endpoints
 
+@app.get("/categories")
+def get_categories(db: Session = Depends(get_db)):
+    """Get all available categories"""
+    categories = db.query(Category).all()
+    return categories
 
+@app.get("/users/me/items")
+def get_my_items(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    status: Optional[str] = None  # "active", "pending", "sold"
+):
+    """Get current user's uploaded items"""
+    query = db.query(Item).filter(Item.user_id == current_user.id)
+    
+    if status == "active":
+        query = query.filter(Item.is_available == True, Item.is_approved == True)
+    elif status == "pending":
+        query = query.filter(Item.is_approved == False)
+    elif status == "sold":
+        query = query.filter(Item.is_available == False)
+    
+    items = query.order_by(Item.created_at.desc()).all()
+    return items
 
+@app.get("/users/me/swaps")
+def get_my_swaps(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    status: Optional[str] = None  # "pending", "active", "completed", "cancelled"
+):
+    """Get current user's swap history"""
+    query = db.query(Swap).filter(
+        (Swap.initiator_id == current_user.id) | (Swap.recipient_id == current_user.id)
+    )
+    
+    if status:
+        query = query.filter(Swap.status == status.upper())
+    
+    swaps = query.order_by(Swap.created_at.desc()).all()
+    return swaps
+
+@app.get("/users/me/dashboard")
+def get_user_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get user dashboard data"""
+    # Get user's items count
+    total_items = db.query(Item).filter(Item.user_id == current_user.id).count()
+    active_items = db.query(Item).filter(
+        Item.user_id == current_user.id,
+        Item.is_available == True,
+        Item.is_approved == True
+    ).count()
+    pending_items = db.query(Item).filter(
+        Item.user_id == current_user.id,
+        Item.is_approved == False
+    ).count()
+    
+    # Get swap statistics
+    total_swaps = db.query(Swap).filter(
+        (Swap.initiator_id == current_user.id) | (Swap.recipient_id == current_user.id)
+    ).count()
+    
+    completed_swaps = db.query(Swap).filter(
+        ((Swap.initiator_id == current_user.id) | (Swap.recipient_id == current_user.id)) &
+        (Swap.status == "COMPLETED")
+    ).count()
+    
+    # Get recent activity
+    recent_items = db.query(Item).filter(Item.user_id == current_user.id).order_by(Item.created_at.desc()).limit(5).all()
+    recent_swaps = db.query(Swap).filter(
+        (Swap.initiator_id == current_user.id) | (Swap.recipient_id == current_user.id)
+    ).order_by(Swap.created_at.desc()).limit(5).all()
+    
+    return {
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "points_balance": current_user.points_balance,
+            "is_admin": current_user.is_admin
+        },
+        "stats": {
+            "total_items": total_items,
+            "active_items": active_items,
+            "pending_items": pending_items,
+            "total_swaps": total_swaps,
+            "completed_swaps": completed_swaps
+        },
+        "recent_items": recent_items,
+        "recent_swaps": recent_swaps
+    }
+
+@app.get("/items/featured")
+def get_featured_items(
+    db: Session = Depends(get_db),
+    limit: int = 10
+):
+    """Get featured items for landing page"""
+    featured_items = db.query(Item).filter(
+        Item.is_featured == True,
+        Item.is_approved == True,
+        Item.is_available == True
+    ).order_by(Item.view_count.desc()).limit(limit).all()
+    
+    return featured_items
+
+@app.post("/notifications/{notification_id}/read")
+def mark_notification_read(
+    notification_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mark a notification as read"""
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    notification.is_read = True
+    db.commit()
+    return {"message": "Notification marked as read"}
+
+@app.post("/notifications/read-all")
+def mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Mark all notifications as read"""
+    db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False
+    ).update({"is_read": True})
+    db.commit()
+    return {"message": "All notifications marked as read"}
+
+@app.get("/admin/dashboard")
+def get_admin_dashboard(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Get admin dashboard statistics"""
+    total_users = db.query(User).count()
+    total_items = db.query(Item).count()
+    pending_items = db.query(Item).filter(Item.is_approved == False).count()
+    flagged_items = db.query(Item).filter(Item.is_flagged_by_ai == True).count()
+    total_swaps = db.query(Swap).count()
+    completed_swaps = db.query(Swap).filter(Swap.status == "COMPLETED").count()
+    
+    # Recent admin actions
+    recent_actions = db.query(AdminAction).order_by(AdminAction.created_at.desc()).limit(10).all()
+    
+    return {
+        "stats": {
+            "total_users": total_users,
+            "total_items": total_items,
+            "pending_items": pending_items,
+            "flagged_items": flagged_items,
+            "total_swaps": total_swaps,
+            "completed_swaps": completed_swaps
+        },
+        "recent_actions": recent_actions
+    }
+
+@app.get("/search/recommendations")
+def get_item_recommendations(
+    user_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional)
+):
+    """Get personalized item recommendations"""
+    query = db.query(Item).filter(
+        Item.is_approved == True,
+        Item.is_available == True
+    )
+    
+    if category_id:
+        query = query.filter(Item.category_id == category_id)
+    
+    # If user is logged in, prioritize items from categories they've interacted with
+    if current_user:
+        # Get user's swap history to find preferred categories
+        user_swaps = db.query(Swap).filter(
+            (Swap.initiator_id == current_user.id) | (Swap.recipient_id == current_user.id)
+        ).all()
+        
+        # Extract item IDs from swaps
+        item_ids = []
+        for swap in user_swaps:
+            item_ids.extend([swap.initiator_item_id, swap.recipient_item_id])
+        
+        if item_ids:
+            # Get categories from user's swap history
+            preferred_categories = db.query(Item.category_id).filter(
+                Item.id.in_(item_ids)
+            ).distinct().all()
+            
+            category_ids = [cat[0] for cat in preferred_categories]
+            if category_ids:
+                # Order by preferred categories first
+                query = query.order_by(
+                    case(
+                        (Item.category_id.in_(category_ids), 0),
+                        else_=1
+                    ),
+                    Item.view_count.desc()
+                )
+    
+    # Fallback to most viewed items
+    if not current_user or not user_swaps:
+        query = query.order_by(Item.view_count.desc())
+    
+    recommendations = query.limit(limit).all()
+    return recommendations
+
+@app.post("/items/{item_id}/redeem")
+def redeem_item_with_points(
+    item_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Redeem an item using points"""
+    item = db.query(Item).filter(
+        Item.id == item_id,
+        Item.is_approved == True,
+        Item.is_available == True
+    ).first()
+    
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    if item.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot redeem your own item")
+    
+    if current_user.points_balance < item.points_value:
+        raise HTTPException(status_code=400, detail="Insufficient points")
+    
+    # Create point transaction
+    point_transaction = PointTransaction(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        transaction_type="SPENT",
+        amount=item.points_value,
+        description=f"Redeemed item: {item.title}",
+        related_item_id=item.id
+    )
+    
+    # Transfer points to item owner
+    item_owner = db.query(User).filter(User.id == item.user_id).first()
+    item_owner.points_balance += item.points_value
+    current_user.points_balance -= item.points_value
+    
+    # Mark item as unavailable
+    item.is_available = False
+    
+    # Create notification for item owner
+    notification = Notification(
+        id=str(uuid.uuid4()),
+        user_id=item.user_id,
+        type="ITEM_REDEEMED",
+        title="Item Redeemed",
+        message=f"Your item '{item.title}' has been redeemed for {item.points_value} points",
+        related_swap_id=None
+    )
+    
+    db.add(point_transaction)
+    db.add(notification)
+    db.commit()
+    
+    return {"message": "Item redeemed successfully"}
+
+@app.get("/tags/popular")
+def get_popular_tags(
+    db: Session = Depends(get_db),
+    limit: int = 20
+):
+    """Get most popular tags"""
+    popular_tags = db.query(Tag.name, func.count(ItemTag.id).label('count')).\
+        join(ItemTag, Tag.id == ItemTag.tag_id).\
+        group_by(Tag.name).\
+        order_by(func.count(ItemTag.id).desc()).\
+        limit(limit).all()
+    
+    return [{"name": tag.name, "count": tag.count} for tag in popular_tags]
+
+@app.get("/users/{user_id}/profile")
+def get_user_profile(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get public user profile"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get user's items
+    user_items = db.query(Item).filter(
+        Item.user_id == user_id,
+        Item.is_approved == True,
+        Item.is_available == True
+    ).all()
+    
+    # Get user's rating
+    avg_rating = db.query(func.avg(Rating.rating)).filter(Rating.rated_user_id == user_id).scalar()
+    total_ratings = db.query(func.count(Rating.id)).filter(Rating.rated_user_id == user_id).scalar()
+    
+    return {
+        "user": {
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "created_at": user.created_at
+        },
+        "stats": {
+            "total_items": len(user_items),
+            "average_rating": round(avg_rating or 0, 2),
+            "total_ratings": total_ratings
+        },
+        "items": user_items
+    }
