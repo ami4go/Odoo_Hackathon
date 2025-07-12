@@ -1,0 +1,103 @@
+[
+  {
+    "title": "User Authentication & Profile Management",
+    "content": "Purpose: Allow users to create an account, log in, update profile details, view their dashboard, track their items, swaps, and points.\n\nDetails:\n- Users can register and sign in to their profile using JWT authentication.\n- After login, they can access their dashboard, where they can see their listed items, ongoing/completed swaps, point history, and user ratings.\n- Users can update their name and profile picture.\n\nAPIs:\n- POST /api/auth/signup \u2013 Register a new user\n- POST /api/auth/login \u2013 Log in and receive token\n- GET /api/auth/me \u2013 Fetch current user details\n- PUT /api/user/update \u2013 Update profile information\n- GET /api/user/:id/items \u2013 View items uploaded by the user\n- GET /api/user/:id/swaps \u2013 View swap history\n- GET /api/user/:id/points-history \u2013 View point transaction history\n- GET /api/user/:id/ratings \u2013 View user ratings",
+    "metadata": {
+      "tags": [
+        "authentication",
+        "profile",
+        "dashboard",
+        "user activity",
+        "points tracking"
+      ]
+    }
+  },
+  {
+    "title": "Item Management",
+    "content": "Purpose: Enable users to list unused clothes, browse other listings, and update their own items.\n\nDetails:\n- Users can list a new item by uploading images, writing a description, and assigning tags (size, condition, etc.)\n- All items can be browsed with filters like category, size, and tags.\n- Users can preview how their item will appear before publishing.\n- Similar items can be recommended using tag-based similarity.\n\nAPIs:\n- POST /api/items \u2013 Create a new item listing\n- GET /api/items \u2013 Browse/search items\n- GET /api/items/featured \u2013 View featured items carousel\n- GET /api/items/:id \u2013 View details of an item\n- GET /api/items/:id/similar \u2013 Get similar items\n- PUT /api/items/:id \u2013 Edit item listing\n- DELETE /api/items/:id \u2013 Delete an item\n- POST /api/items/preview \u2013 Preview item before submission",
+    "metadata": {
+      "tags": [
+        "items",
+        "listings",
+        "browsing",
+        "categories",
+        "filters",
+        "recommendations"
+      ]
+    }
+  },
+  {
+    "title": "Swap Management",
+    "content": "Purpose: Facilitate direct swapping between users by allowing offers, requests, and swap tracking.\n\nHow to Swap:\n1. List your item.\n2. Browse other users' listings.\n3. Select an item you want and offer one of your own in exchange.\n4. Wait for the user to accept, reject, or complete the swap.\n\nSwap Status:\n- pending\n- accepted\n- rejected\n- completed\n\nAPIs:\n- POST /api/swaps \u2013 Create a swap request\n- PUT /api/swaps/:id/status \u2013 Update swap status\n- GET /api/swaps/:id \u2013 View swap details\n- GET /api/swaps \u2013 View swaps with filters",
+    "metadata": {
+      "tags": [
+        "swapping",
+        "item exchange",
+        "offer system",
+        "swap lifecycle"
+      ]
+    }
+  },
+  {
+    "title": "Points System & Analytics",
+    "content": "Purpose: Track user contribution and engagement using a point system.\n\nUsers earn points when completing swaps. Points can be used to redeem items without a direct swap. Full transaction history is available in the dashboard.\n\nAPIs:\n- POST /api/points/add \u2013 Add points (admin/system)\n- POST /api/points/deduct \u2013 Deduct points on swap or redemption\n- GET /api/points/history/:userId \u2013 View user\u2019s point history",
+    "metadata": {
+      "tags": [
+        "points",
+        "gamification",
+        "reward system",
+        "analytics"
+      ]
+    }
+  },
+  {
+    "title": "Notification System",
+    "content": "Purpose: Notify users about swap updates, item approvals, and general events in real time.\n\nEvents:\n- New swap request received\n- Item approval status update\n- Swap status change (accepted/rejected/completed)\n\nAPIs:\n- GET /api/notifications/:userId \u2013 Fetch notifications\n- PUT /api/notifications/:id/mark-read \u2013 Mark notification as read\n\nWebSocket Events:\n- swapRequestReceived\n- itemApproved\n- swapStatusChanged\n- newNotification",
+    "metadata": {
+      "tags": [
+        "notifications",
+        "real-time",
+        "updates",
+        "events",
+        "websocket"
+      ]
+    }
+  },
+  {
+    "title": "Rating System",
+    "content": "Purpose: Build trust by allowing users to review each other post-swap.\n\nDetails:\n- After each completed swap, users can rate and leave a comment for the other person.\n- Ratings help new users assess trustworthiness.\n\nAPIs:\n- POST /api/ratings \u2013 Submit rating after swap\n- GET /api/ratings/:userId \u2013 View user\u2019s ratings",
+    "metadata": {
+      "tags": [
+        "ratings",
+        "trust",
+        "feedback",
+        "reviews"
+      ]
+    }
+  },
+  {
+    "title": "Admin Panel & Moderation",
+    "content": "Purpose: Provide admins with control over platform content and health.\n\nAdmins can review and approve item listings. Inappropriate or spammy items can be removed. Admins can monitor overall stats like user growth and swap volume.\n\nAPIs:\n- POST /api/admin/login \u2013 Admin login\n- GET /api/admin/items/pending \u2013 List items pending approval\n- PUT /api/admin/item/:id/approve \u2013 Approve item\n- DELETE /api/admin/item/:id/reject \u2013 Remove item\n- GET /api/admin/stats \u2013 Get stats on users/items/swaps",
+    "metadata": {
+      "tags": [
+        "admin",
+        "moderation",
+        "approval",
+        "content control",
+        "platform stats"
+      ]
+    }
+  },
+  {
+    "title": "Comments & Public Q&A",
+    "content": "Purpose: Let users ask public questions under item listings to clarify before swapping.\n\nDetails:\n- Anyone can post a question under an item.\n- Helps reduce confusion and improve communication.\n\nAPIs:\n- POST /api/comments \u2013 Add a comment under an item\n- GET /api/comments/:itemId \u2013 Fetch comments for item",
+    "metadata": {
+      "tags": [
+        "comments",
+        "questions",
+        "clarification",
+        "community discussion"
+      ]
+    }
+  }
+]
