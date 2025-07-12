@@ -1,116 +1,148 @@
 
-# 👕♻️ ReWear – Community Clothing Exchange
+# 👕 ReWear – Community Clothing Exchange
 
-ReWear is a sustainable fashion platform that enables users to **swap unused clothing** through direct exchanges or a **point-based redemption system**. Our goal is to **reduce textile waste**, promote **eco-conscious fashion**, and create a fun, Gen-Z-friendly community for circular clothing reuse.
-
----
-
-## 🚀 Features
-
-### Core
-- 🔐 User Authentication (Email/Password)
-- 🏠 Landing Page with Calls-to-Action
-- 👤 User Dashboard with Profile, Points, Swap History
-- 🛍️ Item Detail Page with “Swap” & “Redeem” options
-- ➕ Add New Item Page with Live Preview
-- 🧾 Points History & Analytics
-- ⚙️ Admin Panel with Moderation Tools
-
-### Extras
-- 🔍 Smart Search + Filters
-- 🏷️ Tag-Based Recommendations
-- 🌙 Theme & Dark Mode Toggle
-- 📦 Item Availability Indicator
-- 🔔 Notification System
-- ⭐ Rating System
-- 📊 Admin Dashboard Stats
-- 🤖 Chatbot Integration
-- 🧠 Spam Detection (via Gemini)
-- 🔄 Real-time Updates (WebSocket ready)
+**ReWear** is a full-stack web application designed to promote sustainable fashion by enabling users to **swap unused clothing** or **redeem them using a point system**. The platform encourages reuse and reduces textile waste through a community-driven exchange model.
 
 ---
 
-## 🧱 Tech Stack
+## 🌍 Project Overview
 
-### 🔧 Backend
-- Python (FastAPI / Flask)
-- PostgreSQL (or any SQL DB)
-- SQLAlchemy
-- JWT-based Authentication
-- REST APIs
+ReWear empowers users to:
 
-### 💅 Frontend
-- React (via **Vite**)
-- Tailwind CSS
-- Axios for API requests
-- React Router
-- Zustand or Context API for global state (optional)
-- Fully responsive and Gen-Z inspired UI
+- List unused clothes and swap with others.
+- Earn and spend points for clothes.
+- Explore items with smart filters.
+- Admins moderate item listings with AI-assistance.
+- Get intelligent recommendations powered by AI.
+
+The project uses:
+- **FastAPI** backend (Python)
+- **React + Tailwind CSS** frontend
+- **PostgreSQL** database via **SQLAlchemy ORM**
+- **Gemini AI** for spam detection
+- **JWT + OAuth2** for secure auth
 
 ---
 
-## 🛠️ Setup Instructions
+## ✨ Features
 
-### 1. Clone the Repository
+### 🧑 User Features
+- Email/Password Sign-up and Login
+- Dashboard: Profile, Points, Items, Swaps
+- Upload Items: Add details, tags, images
+- Browse Items: Filter by tag, category, condition
+- Detailed Item View: Images, status, uploader info
+- Request Swaps or Redeem Items with Points
+- Notifications (Swap Updates, Item Approval)
+- Rating System (rate other users post-swap)
+
+### 🛠️ Admin Features
+- Same login page (shared auth)
+- Approve/Reject/Remove item listings
+- View AI-flagged content
+- Ban/Unban users
+- View admin stats (basic dashboard)
+- Real-time updates (WebSocket ready)
+
+---
+
+## 💡 Extra Features (Implemented but Frontend Pending)
+- 🧠 Smart search filters
+- 🏷️ Tag-based recommendations
+- 🌈 Dark mode toggle
+- 🧾 Points history + swap analytics
+- 👀 Preview card before listing item
+- 🧠 AI spam detection (Gemini)
+- 🔔 Notification system
+- 🚀 One-click swap request
+- 📦 Item availability indicators
+- 🤖 Chatbot integration
+- 🧪 Admin analytics dashboard
+
+---
+
+## 🔧 Tech Stack
+
+| Layer        | Tech                     |
+|--------------|---------------------------|
+| Backend      | FastAPI, SQLAlchemy       |
+| Frontend     | React.js, Tailwind CSS    |
+| Database     | PostgreSQL                |
+| Auth         | JWT + OAuth2              |
+| AI/ML        | Google Gemini (via API)   |
+| Dev Tools    | Vite, dotenv, WebSocket-ready |
+| Media Upload | Local static folder (`/static/uploads`) |
+
+---
+
+## 🚀 Getting Started
+
+### 1️⃣ Backend Setup (FastAPI)
 
 ```bash
-git clone https://github.com/your-username/rewear.git
-cd rewear
-```
+# Clone the repo
+git clone https://github.com/your-org/rewear.git
+cd rewear/backend
 
----
-
-### 2. ⚙️ Backend Setup
-
-> Make sure you have Python 3.10+ and pip installed.
-
-```bash
-cd backend
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate   # or `venv\Scripts\activate` on Windows
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-#### Run the backend server:
+# Set environment variables
+cp .env.example .env
+# Add your DATABASE_URL and GEMINI_API_KEY inside .env
 
-```bash
+# Run backend
 uvicorn main:app --reload
 ```
 
-The backend will run at `http://localhost:8000`
+---
+
+### 2️⃣ PostgreSQL Database Setup
+
+Ensure PostgreSQL is installed and a database named `rewear` is created.
+
+```bash
+# Example commands
+psql -U postgres
+CREATE DATABASE rewear;
+\q
+```
 
 ---
 
-### 3. 💻 Frontend Setup
-
-> Make sure you have **Node.js v16+** and **npm** installed.
+### 3️⃣ Frontend Setup (React + Tailwind)
 
 ```bash
-cd frontend
+cd ../frontend
+
+# Install dependencies
 npm install
-```
 
-#### Run the frontend (Vite Dev Server):
-
-```bash
+# Run the dev server
 npm run dev
 ```
 
-Frontend will be available at `http://localhost:5173`
+This will launch the frontend at `http://localhost:5173`.
 
 ---
 
-## ✅ Final Checklist Before Running
+## ✅ Usage Flow
 
-- ✅ Backend is running on port `8000`
-- ✅ Frontend is connected to backend via `.env` or Axios base URL
-- ✅ No mock data or hardcoding — all data fetched from APIs
-- ✅ Database is seeded (if needed) with sample data (optional)
-- ✅ Admin credentials are created (if admin functionality exists)
+1. **User signs up** → Login
+2. **Adds item** → Backend uses Gemini AI to flag potential spam
+3. **Admin logs in** → Views flagged or pending items → Approves or rejects
+4. **Only approved items** appear in public browse page
+5. **User can swap or redeem** → Backend updates ownership and logs transactions
+6. **Points tracked** → User can view full history
+7. **Ratings posted** after swap → Builds trust across platform
 
 ---
 
-## 📁 Project Structure
+## 📁 Folder Structure (Simplified)
 
 ```
 rewear/
@@ -118,30 +150,51 @@ rewear/
 │   ├── main.py
 │   ├── models/
 │   ├── routes/
-│   ├── schemas/
-│   └── ...
+│   ├── utils/
+│   ├── static/uploads/
+│   └── .env
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   ├── pages/
-│   │   ├── assets/
-│   │   └── ...
-│   └── index.html
-└── README.md
+│   │   └── App.jsx
+│   └── tailwind.config.js
 ```
 
 ---
 
-## ✨ Contributing
+## 🤝 Contributing
 
-We love contributors! Please follow our coding standards (linting, folder structure, reusable components) and raise a pull request 🚀
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for more information.
+1. Fork the repo
+2. Create your feature branch (`git checkout -b feature/YourFeature`)
+3. Commit your changes (`git commit -m 'Add YourFeature'`)
+4. Push to the branch (`git push origin feature/YourFeature`)
+5. Open a Pull Request
 
 ---
 
-> Built with 💚 to swap fast fashion for smart fashion.
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+## 👥 Team
+
+- Backend: FastAPI Team
+- Frontend: React Team
+- AI/ML: Gemini Integration
+- DB: PostgreSQL Gurus
+
+---
+
+## 🔐 Admin Credentials
+
+Use the following admin credentials to log in from the same login page:
+
+- **Email:** `admin@swapapp.com`
+- **Password:** `admin123`
+
+> Once logged in, admins will automatically see the `/admin` panel in the header if `isAdmin` is true.
+
+---
