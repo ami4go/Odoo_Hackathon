@@ -56,6 +56,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+from enum import Enum
+class ItemCondition(str, Enum):
+    NEW = "new"
+    GOOD = "good"
+    FAIR = "fair"
+
+class ItemType(str, Enum):
+    SWAP = "swap"
+    REDEEM = "redeem"
+
+
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=401,
