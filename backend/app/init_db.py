@@ -45,11 +45,11 @@ def init_database():
         
         # Create sample categories
         categories_data = [
-            {"name": "Tops", "description": "Shirts, blouses, t-shirts, sweaters"},
-            {"name": "Bottoms", "description": "Pants, jeans, skirts, shorts"},
-            {"name": "Dresses", "description": "Casual and formal dresses"},
+            {"name": "Top", "description": "Shirts, blouses, t-shirts, sweaters"},
+            {"name": "Bottom", "description": "Pants, jeans, skirts, shorts"},
+            {"name": "Dress", "description": "Casual and formal dresses"},
             {"name": "Shoes", "description": "Sneakers, heels, boots, sandals"},
-            {"name": "Accessories", "description": "Bags, jewelry, scarves, belts"},
+            {"name": "Accessory", "description": "Bags, jewelry, scarves, belts"},
             {"name": "Outerwear", "description": "Jackets, coats, blazers"},
             {"name": "Activewear", "description": "Sports and fitness clothing"},
             {"name": "Vintage", "description": "Vintage and retro clothing"}
@@ -67,6 +67,27 @@ def init_database():
                 print(f"✅ Category created: {cat_data['name']}")
         
         db.commit()
+
+        # Create admin user if not exists
+        admin_email = "admin@example.com"
+        admin_password = "adminpassword123"
+        admin_user = db.query(User).filter(User.email == admin_email).first()
+        if not admin_user:
+            admin = User(
+                id=str(uuid.uuid4()),
+                email=admin_email,
+                password_hash=pwd_context.hash(admin_password),
+                first_name="Admin",
+                last_name="User",
+                is_admin=True,
+                is_verified=True,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(admin)
+            db.commit()
+            print(f"✅ Admin user created: {admin_email} / {admin_password}")
+        
         print("\n🎉 Database initialized successfully!")
         print("\n📋 Login Credentials:")
         print("   Admin: admin@swapapp.com / admin123")
