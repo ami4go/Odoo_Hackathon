@@ -209,3 +209,82 @@ We set up the **foundation** for carrying this project forward:
 | **MAVROS** | Old bridge between ROS 1 and PX4 (uses MAVLink protocol) |
 | **XRCE-DDS** | New bridge between ROS 2 and PX4 (uses DDS protocol, faster) |
 | **Gazebo** | A 3D physics simulator where we test the drone virtually |
+
+---
+---
+
+# 🎯 OUR FOCUS: Objective 2 — End-to-End Loop Closure in SITL
+
+> The previous team built the sensor, the AI model, and the simulation — but **never connected them**. The sensor data never actually reached the drone's flight controller. Our job is to **close this loop**.
+
+```
+STM32 Sensor → [??? GAP ???] → ROS Topics → Planner → PX4 → Drone Moves
+```
+**The "???" is our job.**
+
+---
+
+## Our 3 Specific Tasks
+
+### Task A: Sensor-to-ROS Bridge
+Stream live STM32 data into ROS topics that PX4 can consume.
+
+**Plan:**
+1. STM32 sends data via UART: `{distance: 0.45, class: "glass", confidence: 0.91}`
+2. We write a ROS 2 node that reads serial, parses it, and publishes:
+   - `/sensor/distance` (Float32)
+   - `/sensor/material_class` (String)
+   - `/sensor/confidence` (Float32)
+3. In SITL, we **mock** this data using a virtual sensor until real hardware is ready
+
+---
+
+### Task B: Classification-Aware Avoidance
+Make the drone **react differently** based on what the sensor reports.
+
+| Sensor Input | Drone Reaction |
+|---|---|
+| Any obstacle < 0.3m | **Emergency stop** — hover immediately |
+| Hard surface (metal/concrete) at 0.3-0.8m | **Reroute** — plan alternative path |
+| Soft surface (fabric/foam) at 0.3-0.8m | **Slow down** — proceed cautiously |
+| Low confidence (< 70%) | **Hover** — wait for more readings |
+| No obstacle detected | **Continue** — follow planned trajectory |
+
+**Implementation:** A ROS 2 avoidance node subscribes to sensor topics and publishes modified trajectory setpoints to `/fmu/in/trajectory_setpoint` or emergency commands to `/fmu/in/vehicle_command`.
+
+---
+
+### Task C: Quantitative Mission Validation
+Run test scenarios and measure performance with hard numbers.
+
+| Metric | What It Measures | Target |
+|---|---|---|
+| **Mission Success Rate** | % of runs where drone reaches goal without crashing | > 90% |
+| **Planning Latency** | Time from detection to avoidance maneuver | < 200ms |
+| **False-Positive Rate** | How often drone avoids a phantom obstacle | < 5% |
+| **False-Negative Rate** | How often drone misses a real obstacle | 0% |
+
+**Test scenarios:** (1) Straight flight toward wall, (2) Corridor navigation, (3) Multi-obstacle room, (4) Material-dependent (glass vs. curtain)
+
+---
+
+## Week-by-Week Plan
+
+| Week | Focus | Deliverable |
+|---|---|---|
+| **Week 0** | Environment setup & baseline | Verified toolchain, hover data (DONE) |
+| **Week 1** | Add depth camera to Gazebo drone | Simulated sensor publishing PointCloud2 |
+| **Week 2** | Build Sensor-to-ROS bridge node | Mock STM32 data as ROS 2 topics |
+| **Week 3** | Implement avoidance decision logic | Drone stops when obstacle detected |
+| **Week 4** | Add material-aware behavior | Different reactions per material type |
+| **Week 5** | Build test scenarios in Gazebo | 4 structured mission scenarios |
+| **Week 6** | Quantitative validation | Success rate, latency, false-positive rate |
+| **Week 7** | Connect real STM32 (from Team 1) | Live UART data into ROS 2 |
+| **Week 8** | Final integration & report | End-to-end demo + documentation |
+
+---
+
+## What To Tell The Tutor
+
+> "The previous team built the sensor hardware (ultrasonic FMCW radar) and the AI classifier, and set up a ROS/Gazebo simulation with a path planner. However, these components were never connected — the sensor data never reached the drone's control system. Our objective is to **close this loop** by building a Sensor-to-ROS bridge, implementing classification-aware avoidance logic, and validating everything with quantitative metrics in SITL. In Week 0, we have set up the entire simulation toolchain using ROS 2 Humble, PX4 v1.14, and Gazebo Sim, and verified that the baseline environment is working correctly."
+
