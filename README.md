@@ -487,15 +487,3 @@ Run test scenarios and measure performance with hard numbers.
 
 ---
 
-## What To Tell The Tutor
-
-> "In Week 0 we set up the simulation toolchain (ROS 2 Humble, PX4 v1.14, Gazebo Sim with XRCE-DDS bridge) and verified baseline hover stability (0.04m horizontal drift).
->
-> In Week 1, we added physical obstacles to the Gazebo world and attempted two approaches to drone navigation:
->
-> **Approach 1 (Automated Waypoints)** — We wrote a ROS 2 offboard control node that commands the drone through pre-planned waypoints. This approach failed because the drone has no sensors — it flies blind and repeatedly collides with obstacles. This is **open-loop navigation** and confirmed that the previous team's insight was correct: you need a perception pipeline (sensors → point cloud → occupancy map → planner) for real obstacle avoidance.
->
-> **Approach 2 (Keyboard Teleop)** — We built a manual controller that proved the control pipeline is solid. The drone responds accurately to position commands; the missing piece is perception, not control.
->
-> **Next step:** Add a simulated depth camera to the drone so it can actually see obstacles, then implement the path planning pipeline from the previous BTP report (OctoMap + DWA cost function)."
-
