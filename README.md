@@ -168,26 +168,229 @@ We set up the **foundation** for carrying this project forward:
 
 ---
 
-## How We Plan To Carry This Forward
+## What We Have Done So Far (Week 1) — Obstacle Navigation
 
-### Phase 1: Perception (Weeks 1-2)
-- Add a **simulated depth camera** to our Gazebo drone model
-- Write a ROS 2 node that converts depth images to PointCloud2
-- Apply the same **statistical outlier removal** and **voxel grid filtering** from the report
+### 1.1 Added Obstacles to the Indoor World
 
-### Phase 2: Mapping (Weeks 3-4)
-- Integrate **OctoMap** with ROS 2 to build a 3D map of our indoor room
-- Visualize the occupancy grid in RViz2
+We modified `indoor_10x8x3.sdf` to include **3 obstacles** and **2 floor markers** inside the room:
 
-### Phase 3: Planning (Weeks 5-6)
-- Implement the **DWA local planner** as a ROS 2 node
-- Use the cost function from the report to score and select safe trajectories
-- Test obstacle avoidance in the 10x8x3m room
+| Object | Position (X, Y) | Size (W × D × H) | Color | Purpose |
+|---|---|---|---|---|
+| Pillar 1 | (0, 1) | 0.5 × 0.5 × 2.5m | 🔴 Red | Blocks the direct path between start and destination |
+| Low Wall | (-1.5, -1) | 2.0 × 0.3 × 1.5m | 🟠 Orange | Partially blocks the lower flight corridor |
+| Pillar 2 | (2, 0) | 0.6 × 0.6 × 2.5m | 🟡 Yellow | Forces the drone to weave between obstacles |
+| Start Marker | (-3, -2) | radius 0.4m disc | 🟢 Green | Visual-only — marks the takeoff point |
+| Destination Marker | (3, 2) | radius 0.4m disc | 🔵 Blue | Visual-only — marks the landing target |
 
-### Phase 4: Integration (Weeks 7-8)
-- Connect the full pipeline: Camera -> PointCloud -> OctoMap -> DWA -> PX4
-- Run end-to-end autonomous navigation in simulation
-- Compare results with the previous team's findings
+Each obstacle has both a **collision** component (physics — the drone can't fly through it) and a **visual** component (what you see in Gazebo). The markers are visual-only so the drone can land on them.
+
+**Room layout (top-down view):**
+```
+        Y = +4 (front wall)
+   ┌─────────────────────────────────┐
+   │                                 │
+   │                  🔵 DEST (3,2)  │
+   │           ██ Red (0,1)          │
+   │                      ██ Yellow  │
+   │      ═══ Orange (-1.5,-1)       │
+   │  🟢 START (-3,-2)              │
+   │                                 │
+   └─────────────────────────────────┘
+        Y = -4 (back wall)
+   X = -5                       X = +5
+```
+
+---
+
+### 1.2 Approach 1: Automated Waypoint Navigation (`offboard_waypoint_nav.py`)
+
+**What this script does:**
+- Arms the drone and switches to **offboard mode** (PX4 takes commands from code instead of a remote)
+- Takes off to 1.8m altitude
+- Follows a pre-planned sequence of **6 waypoints** that route around the obstacles
+- At each waypoint, waits until the drone is within 0.4m before advancing to the next
+- Lands at the blue destination marker
+
+**Planned flight path:**
+```
+Spawn(0,0) → Takeoff(0,0,1.8m) → Start(-3,-2,1.8m) →
+  WP(-3,0,1.8m) → WP(-1,2,1.8m) → WP(1,2,1.8m) →
+    Destination(3,2,1.8m) → LAND
+```
+
+**Key concepts in this file:**
+| Concept | Explanation |
+|---|---|
+| **Offboard mode** | PX4 flight mode where the drone takes position/velocity commands from an external computer (our ROS 2 node) instead of a human remote. Requires continuous heartbeat messages at ≥2 Hz. |
+| **NED coordinates** | PX4 uses North-East-Down. Z = -1.8 means 1.8 meters UP. Standard in aviation but counterintuitive at first. |
+| **OffboardControlMode** | Heartbeat message — tells PX4 "I'm alive and want position control." If PX4 stops receiving this, it switches to failsafe. |
+| **TrajectorySetpoint** | The actual "go to this X, Y, Z" command sent to PX4. |
+| **VehicleCommand** | One-time commands like ARM (turn on motors, cmd=400) or SET_MODE (switch to offboard, cmd=176). |
+| **VehicleOdometry** | PX4 publishes the drone's current position ~30 times/sec. We subscribe to this to check if we've reached a waypoint. |
+
+#### ⚠️ Challenges Encountered with Automated Navigation
+
+The automated waypoint approach had **significant stability issues**:
+
+1. **Wall collisions** — The drone would repeatedly hit the room walls and obstacles, especially during transitions between waypoints. The straight-line path between waypoints passed too close to obstacles.
+
+2. **Falling and recovering** — After collisions, the drone would lose altitude, fall toward the ground, then attempt to climb back up, creating an erratic up-down oscillation.
+
+3. **Lack of real-time awareness** — The script has **no obstacle detection**. It blindly follows pre-programmed coordinates. If the drone drifts due to physics (propwash near walls, collision rebounds), it has no way to correct or avoid the obstacle in its path.
+
+4. **PX4 parameter tuning** — The default PX4 acceleration and velocity limits (`MPC_ACC_HOR_MAX = 5.0 m/s²`) may be too aggressive for a confined indoor space. The previous team used 2.0 m/s² for indoor safety.
+
+**Root cause:** This approach is essentially **open-loop navigation** — it assumes the drone will perfectly follow waypoints without any sensor feedback about nearby obstacles. Real obstacle avoidance requires a **closed-loop** system with sensors.
+
+---
+
+### 1.3 Approach 2: Manual Keyboard Controller (`keyboard_control.py`)
+
+To overcome the issues with automated navigation, we built a **manual keyboard teleop** script that gives direct, smooth control of the drone.
+
+**Controls:**
+```
+              W (forward / Y+)
+              ▲
+   A (left) ◄   ► D (right)
+              ▼
+              S (backward / Y-)
+
+   R = altitude UP       F = altitude DOWN
+   T = Takeoff            L = Land
+   Q = Quit
+```
+
+**How it works:**
+- Each key press moves the **target position** by 0.5 meters in the pressed direction
+- PX4 handles the smooth flight to the new target (it uses its own PID controllers)
+- Room boundaries are **clamped** — you can't accidentally command the drone outside the walls (0.5m safety margin)
+- The script uses Python's `termios` module to read individual keypresses without waiting for Enter
+
+**Why this approach works better:**
+| Issue | Automated Script | Keyboard Controller |
+|---|---|---|
+| Obstacle awareness | None — follows blind waypoints | **Human provides the intelligence** — you see obstacles and steer around them |
+| Movement granularity | Jumps between distant waypoints | 0.5m incremental steps — smooth and controlled |
+| Recovery from drift | None — keeps pushing toward waypoint | You can pause, adjust, correct |
+| Learning value | Black box — hard to understand | **Hands-on understanding** of offboard control, NED coordinates, and PX4 behavior |
+
+**Key insight:** The keyboard controller proved that our **offboard control pipeline is working correctly** (arming, mode switching, position commands all work). The problem with the automated script is not the code — it's the **lack of perception**. The drone needs sensors to avoid obstacles, not just pre-programmed waypoints.
+
+---
+
+### 1.4 Files Created/Modified This Week
+
+| File | Type | What It Does |
+|---|---|---|
+| `indoor_10x8x3.sdf` | Modified | Added 3 obstacles (red pillar, orange wall, yellow pillar) and 2 floor markers (green start, blue destination) |
+| `offboard_waypoint_nav.py` | New | Automated waypoint navigation — arms, takes off, follows 6 waypoints, lands. Demonstrates offboard control but lacks obstacle sensing. |
+| `keyboard_control.py` | New | Manual keyboard teleop — WASD movement, R/F altitude, boundary-clamped. Smooth and educational. |
+
+---
+
+### 1.5 Key Learnings
+
+1. **Pre-planned waypoints ≠ obstacle avoidance.** Without sensors, the drone is flying blind. It's like walking through a room with your eyes closed, following memorized directions — you'll eventually bump into something.
+
+2. **PX4's offboard mode works reliably.** Both scripts successfully arm the drone, switch to offboard mode, and accept position commands. The communication pipeline (ROS 2 → XRCE-DDS → PX4) is solid.
+
+3. **NED coordinate system matters.** A common mistake: setting Z = +1.8 (which means 1.8m underground in NED) instead of Z = -1.8 (1.8m above ground). Getting this wrong causes the drone to dive into the floor.
+
+4. **Indoor flight is harder than outdoor.** The confined space means small errors compound quickly — a slight drift toward a wall leads to a collision, which causes a bounce, which leads to more collisions. Outdoor drones have much more room for error.
+
+5. **The keyboard controller is a powerful debugging tool.** Before automating anything, being able to manually fly the drone helps you verify the world, understand the drone's behavior, and test the control pipeline.
+
+---
+
+## How We Plan To Carry This Forward (Revised After Week 1)
+
+> After Week 1, we now understand that **pre-planned waypoints are not enough** for indoor obstacle avoidance. The drone needs **sensors** to perceive obstacles in real-time. This directly maps to the previous team's architecture pipeline (BTP Report, Figure 8.3):
+>
+> ```
+> SENSORS → PointCloud → Local Planner → Cost Calculator → Path Search → PX4 → Drone Moves
+> ```
+>
+> We are currently at: `[waypoint commands] → PX4 → Drone Moves`
+> We need to build: `SENSORS → PointCloud → Local Planner → [smart commands] → PX4 → Drone Moves`
+
+### What Needs To Happen Next (The Gap)
+
+Our keyboard controller proves the control pipeline works. The automated waypoint script proves blind navigation fails. To bridge this gap, we need:
+
+```
+Current state:                     Target state:
+                                   
+ Hardcoded        PX4              Depth Camera    Obstacle     Smart       PX4
+ Waypoints  ───►  Drone            + PointCloud ─► Detection ─► Planner ─►  Drone
+                                                                  ▲
+ (no eyes,         (crashes)        (the drone      (knows what   │
+  no brain)                          can SEE)        is near)   Cost Function
+                                                               (from BTP Ch.8)
+```
+
+---
+
+### Phase 1: Perception — Give the Drone Eyes (Weeks 2-3)
+
+**Goal:** The drone currently flies blind. We need to add a **simulated depth camera** so it can see obstacles.
+
+- Add a depth camera sensor to the x500 drone model in Gazebo
+- Write a ROS 2 node that converts depth images into **PointCloud2** format (a list of thousands of 3D points representing what the camera sees)
+- Apply the same **statistical outlier removal** and **voxel grid filtering** from the BTP report (Chapter 6) to clean up noisy data
+- Verify the drone can "see" the red/orange/yellow obstacles we placed in the room
+
+**Why this matters:** This is the "eyes" component. Right now our drone is like a person walking blindfolded. The depth camera gives it vision.
+
+### Phase 2: Mapping — Build a Mental Map (Weeks 3-4)
+
+**Goal:** Convert the raw point cloud into a structured **3D occupancy map** using OctoMap.
+
+- Integrate **OctoMap** with ROS 2 — this library uses an octree data structure to efficiently represent which parts of the room are occupied (obstacles) vs. free (flyable space)
+- Visualize the occupancy grid in **RViz2** — you'll see a 3D map of the room being built in real-time as the drone looks around
+- This is the same approach from BTP Report Chapter 7
+
+**Why this matters:** Raw point clouds are like individual snapshots. OctoMap combines them into a persistent "memory" of where obstacles are, even after the drone has turned away.
+
+### Phase 3: Planning — Smart Path Generation (Weeks 5-6)
+
+**Goal:** Replace our blind waypoints with a **sensor-aware path planner** that computes obstacle-free routes in real-time.
+
+Two options (increasing complexity):
+
+| Approach | How It Works | Pros | Cons |
+|---|---|---|---|
+| **A\* on Occupancy Grid** | Discretize the room into a 2D/3D grid, search for the shortest obstacle-free path | Simple to implement, guaranteed to find a path if one exists | Doesn't account for drone dynamics |
+| **DWA (from BTP Report Ch.8)** | Sample many possible trajectories, score each with a cost function: `J = α·heading + β·velocity + γ·clearance`, select the best | Accounts for drone speed and turning ability, real-time | More complex, needs parameter tuning |
+
+- Start with **A\*** for simplicity (grid-based, well understood)
+- Later upgrade to **DWA** using the cost function from the BTP report (Figure 8.2):
+  - **Heading cost** — is the path pointing toward the goal?
+  - **Velocity cost** — does the path maintain good speed?
+  - **Clearance cost** — does the path stay far from obstacles?
+
+**Why this matters:** This replaces the "human intelligence" from the keyboard controller with "algorithmic intelligence." The drone can plan its own safe path.
+
+### Phase 4: Integration & Tuning (Weeks 7-8)
+
+**Goal:** Connect the full pipeline end-to-end and validate with quantitative metrics.
+
+- Connect: **Depth Camera → PointCloud → OctoMap → Path Planner → PX4**
+- Tune PX4 parameters for indoor flight:
+  - `MPC_ACC_HOR_MAX`: reduce from 5.0 to 2.0 m/s² (gentler acceleration)
+  - `MPC_VEL_MANUAL`: reduce maximum velocity for indoor safety
+  - `MPC_XY_VEL_MAX`: limit horizontal speed to prevent overshoot
+- Run the same obstacle room scenario that failed with blind waypoints — measure improvement
+- Run the quantitative validation from Task C (success rate, planning latency, false positive/negative rates)
+- Record demonstration videos for the final presentation
+
+**Target metrics:**
+| Metric | Blind Waypoints (Week 1) | Target (Week 8) |
+|---|---|---|
+| Mission success rate | ~10% (crashes frequently) | >90% |
+| Obstacle collisions | Multiple per run | 0 |
+| Planning latency | N/A (pre-programmed) | <200ms |
+| Manual intervention needed | Always | Never |
 
 ---
 
@@ -272,19 +475,27 @@ Run test scenarios and measure performance with hard numbers.
 
 | Week | Focus | Deliverable |
 |---|---|---|
-| **Week 0** | Environment setup & baseline | Verified toolchain, hover data (DONE) |
-| **Week 1** | Add depth camera to Gazebo drone | Simulated sensor publishing PointCloud2 |
-| **Week 2** | Build Sensor-to-ROS bridge node | Mock STM32 data as ROS 2 topics |
-| **Week 3** | Implement avoidance decision logic | Drone stops when obstacle detected |
-| **Week 4** | Add material-aware behavior | Different reactions per material type |
-| **Week 5** | Build test scenarios in Gazebo | 4 structured mission scenarios |
-| **Week 6** | Quantitative validation | Success rate, latency, false-positive rate |
-| **Week 7** | Connect real STM32 (from Team 1) | Live UART data into ROS 2 |
-| **Week 8** | Final integration & report | End-to-end demo + documentation |
+| **Week 0** | Environment setup & baseline | Verified toolchain, hover data ✅ DONE |
+| **Week 1** | Indoor obstacles + drone control | SDF obstacles, waypoint nav (challenges noted), keyboard teleop ✅ DONE |
+| **Week 2** | Add depth camera to Gazebo drone | Simulated sensor publishing PointCloud2 |
+| **Week 3** | PointCloud processing + OctoMap | Noise filtering, 3D occupancy grid in RViz2 |
+| **Week 4** | A* path planner on occupancy grid | Drone computes obstacle-free paths automatically |
+| **Week 5** | DWA local planner (from BTP report) | Cost-function-based trajectory selection |
+| **Week 6** | Sensor-to-ROS bridge for STM32 | Mock/real UART data as ROS 2 topics |
+| **Week 7** | Full pipeline integration | Camera → PointCloud → Map → Planner → PX4 |
+| **Week 8** | Quantitative validation & report | Success rate, latency, demo video, final documentation |
 
 ---
 
 ## What To Tell The Tutor
 
-> "The previous team built the sensor hardware (ultrasonic FMCW radar) and the AI classifier, and set up a ROS/Gazebo simulation with a path planner. However, these components were never connected — the sensor data never reached the drone's control system. Our objective is to **close this loop** by building a Sensor-to-ROS bridge, implementing classification-aware avoidance logic, and validating everything with quantitative metrics in SITL. In Week 0, we have set up the entire simulation toolchain using ROS 2 Humble, PX4 v1.14, and Gazebo Sim, and verified that the baseline environment is working correctly."
+> "In Week 0 we set up the simulation toolchain (ROS 2 Humble, PX4 v1.14, Gazebo Sim with XRCE-DDS bridge) and verified baseline hover stability (0.04m horizontal drift).
+>
+> In Week 1, we added physical obstacles to the Gazebo world and attempted two approaches to drone navigation:
+>
+> **Approach 1 (Automated Waypoints)** — We wrote a ROS 2 offboard control node that commands the drone through pre-planned waypoints. This approach failed because the drone has no sensors — it flies blind and repeatedly collides with obstacles. This is **open-loop navigation** and confirmed that the previous team's insight was correct: you need a perception pipeline (sensors → point cloud → occupancy map → planner) for real obstacle avoidance.
+>
+> **Approach 2 (Keyboard Teleop)** — We built a manual controller that proved the control pipeline is solid. The drone responds accurately to position commands; the missing piece is perception, not control.
+>
+> **Next step:** Add a simulated depth camera to the drone so it can actually see obstacles, then implement the path planning pipeline from the previous BTP report (OctoMap + DWA cost function)."
 
